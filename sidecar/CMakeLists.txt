@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(perf-lens-sidecar VERSION 0.4.0 LANGUAGES C CXX)
+project(perf-lens-sidecar VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -58,7 +58,7 @@ find_package(Clang CONFIG QUIET)
 if(LLVM_FOUND AND Clang_FOUND)
     message(STATUS "LLVM ${LLVM_VERSION} — static analysis rules ENABLED")
     set(PERF_LENS_HAVE_LLVM TRUE)
-    include_directories(${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+    include_directories(SYSTEM ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
     add_definitions(${LLVM_DEFINITIONS})
 else()
     message(STATUS "LLVM/Clang not found — static analysis rules DISABLED (Phase 1/2 features unaffected)")
@@ -104,8 +104,12 @@ if(PERF_LENS_HAVE_LLVM)
         src/rules/packs/stl_hygiene/range_for_copy.cpp
         src/rules/packs/stl_hygiene/endl_flush.cpp
         src/rules/packs/hotpath/vector_no_reserve.cpp
+        src/rules/packs/hotpath/std_function.cpp
+        src/rules/packs/hotpath/virtual_dispatch.cpp
         src/rules/packs/memory_layout/padding_detected.cpp
         src/rules/packs/constexpr/promotion_variable.cpp
+        src/rules/packs/vec/aliasing.cpp
+        src/rules/packs/concurrency/mutex_where_atomic.cpp
     )
     target_compile_definitions(perf-lens-sidecar-lib PUBLIC PERF_LENS_HAVE_LLVM)
     target_link_libraries(perf-lens-sidecar-lib PUBLIC

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { initLogger, logger } from './util/logger';
 import { registerCommands } from './ui/commands';
 import { PerfLensStatusBar } from './ui/statusBar';
@@ -25,6 +26,8 @@ import { GutterHeatmapProvider } from './profile/hotnessProvider';
 import { ProfilePanel } from './panels/profilePanel';
 import { RecordProfilePanel } from './panels/recordProfilePanel';
 import { ProfileComparePanel } from './panels/profileComparePanel';
+import { buildSarifLog } from './sarif/exporter';
+import { collectBundle, writeBundleJson, bundleChecksum, defaultBundleFilename } from './diagnostics/bundle';
 import type { ProviderConfig } from './llm/types';
 import type { OptRemark, Finding, AsmDiff, CompileResult } from './sidecar/protocol';
 
@@ -317,6 +320,87 @@ async function _initialiseAsync(
       }
     }),
 
+    vscode.commands.registerCommand('perfLens.exportSarif', async () => {
+      const saveUri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(
+          (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '') + '/perf-lens.sarif',
+        ),
+        filters: { 'SARIF files': ['sarif', 'json'] },
+        title: 'Export Perf Lens findings as SARIF 2.1.0',
+      });
+      if (!saveUri) return;
+
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+
+      try {
+        // Gather findings for all affected files
+        const findings: Finding[] = [];
+        let affectedFiles: string[] = [];
+        try {
+          affectedFiles = await sidecar.request<string[]>('getAffectedFiles');
+        } catch { /* no findings yet */ }
+
+        for (const file of affectedFiles) {
+          const fileFindings = await sidecar.request<Finding[]>('getFindings', { file });
+          findings.push(...fileFindings);
+        }
+
+        // Gather remarks similarly (best-effort)
+        const remarks: OptRemark[] = [];
+        try {
+          const remarkedFiles = await sidecar.request<{ files: string[] }>('getRemarkedFiles');
+          for (const file of remarkedFiles.files) {
+            const fileRemarks = await sidecar.request<OptRemark[]>('getRemarks', { file });
+            remarks.push(...fileRemarks);
+          }
+        } catch { /* remarks optional */ }
+
+        const sarif = buildSarifLog(findings, remarks, {
+          workspaceRoot,
+          includeRemarks: true,
+          toolVersion: '1.0.0',
+        });
+
+        const fs = await import('fs');
+        fs.writeFileSync(saveUri.fsPath, sarif, 'utf8');
+        void vscode.window.showInformationMessage(
+          `Perf Lens: exported ${findings.length} findings to ${saveUri.fsPath}`,
+        );
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Perf Lens: SARIF export failed — ${(err as Error).message}`,
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('perfLens.diagnosticBundle', async () => {
+      const defaultName = defaultBundleFilename(workspaceRoot);
+      const saveUri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(path.join(workspaceRoot, defaultName)),
+        filters: { 'JSON files': ['json'] },
+        title: 'Save Perf Lens Diagnostic Bundle',
+      });
+      if (!saveUri) return;
+
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: collecting diagnostics…', cancellable: false },
+          async () => {
+            const bundle = await collectBundle(sidecar, profileManager, workspaceRoot);
+            writeBundleJson(bundle, saveUri.fsPath);
+            const checksum = bundleChecksum(bundle);
+            void vscode.window.showInformationMessage(
+              `Perf Lens: bundle saved (${bundle.manifest.summary.findingCount} findings, sha256: ${checksum.slice(0, 8)}…)`,
+            );
+          },
+        );
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Perf Lens: bundle export failed — ${(err as Error).message}`,
+        );
+      }
+    }),
+
     vscode.commands.registerCommand('perfLens.openLoopAnalyser', async (finding: Finding) => {
       const panel = LoopAnalyserPanel.show(ctx);
       const ctrl  = new AbortController();
@@ -338,7 +422,7 @@ async function _initialiseAsync(
   }
 
   statusBar.setReady();
-  logger.info('Perf Lens ready (Phase 5).');
+  logger.info('Perf Lens 1.0.0 ready.');
 }
 
 function _initLLMProviders(llm: LLMManager): void {

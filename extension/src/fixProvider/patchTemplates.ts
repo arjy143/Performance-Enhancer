@@ -6,6 +6,7 @@ export interface PatchResult {
   edit: vscode.WorkspaceEdit;
   description: string;
   verificationPredicate: 'vectorisation_enabled' | 'no_endl_call' | 'constexpr_eval' | 'none';
+  isComment?: boolean;
 }
 
 // Returns a patch for the given finding, or undefined if no template exists.
@@ -17,6 +18,10 @@ export function buildPatch(finding: Finding): PatchResult | undefined {
     case 'perf-lens.stl.range-for-copy':   return patchRangeForCopy(finding);
     case 'perf-lens.hotpath.vector-no-reserve': return patchVectorNoReserve(finding);
     case 'perf-lens.padding.detected':     return patchPaddingDetected(finding);
+    case 'perf-lens.hotpath.std-function': return patchStdFunction(finding);
+    case 'perf-lens.hotpath.virtual-dispatch': return patchVirtualDispatch(finding);
+    case 'perf-lens.vec.aliasing':         return patchVecAliasing(finding);
+    case 'perf-lens.concurrency.mutex-where-atomic': return patchMutexWhereAtomic(finding);
     default: return undefined;
   }
 }
@@ -28,6 +33,10 @@ export const SUPPORTED_RULE_IDS = new Set([
   'perf-lens.stl.range-for-copy',
   'perf-lens.hotpath.vector-no-reserve',
   'perf-lens.padding.detected',
+  'perf-lens.hotpath.std-function',
+  'perf-lens.hotpath.virtual-dispatch',
+  'perf-lens.vec.aliasing',
+  'perf-lens.concurrency.mutex-where-atomic',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -182,6 +191,84 @@ function patchPaddingDetected(finding: Finding): PatchResult | undefined {
   const uri  = vscode.Uri.file(finding.file);
   edit.insert(uri, new vscode.Position(lineIdx, 0), comment + '\n');
   return { edit, description: 'Insert comment to guide struct field reorder', verificationPredicate: 'none' };
+}
+
+// ---------------------------------------------------------------------------
+// hotpath.std-function — insert a TODO comment pointing to template alternatives
+// ---------------------------------------------------------------------------
+function patchStdFunction(finding: Finding): PatchResult | undefined {
+  const lines = readLines(finding.file);
+  if (!lines) return undefined;
+
+  const lineIdx = finding.line - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
+
+  const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
+  const comment = `${indent}// TODO(perf-lens): Replace std::function with a template parameter or function pointer.`;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
+  return { edit, description: 'Insert TODO to replace std::function', verificationPredicate: 'none', isComment: true };
+}
+
+// ---------------------------------------------------------------------------
+// hotpath.virtual-dispatch — insert a TODO comment near the call site
+// ---------------------------------------------------------------------------
+function patchVirtualDispatch(finding: Finding): PatchResult | undefined {
+  const lines = readLines(finding.file);
+  if (!lines) return undefined;
+
+  const lineIdx = finding.line - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
+
+  const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
+  const comment = `${indent}// TODO(perf-lens): Virtual dispatch inside loop — consider CRTP, final class, or type-sorted batching.`;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
+  return { edit, description: 'Insert TODO to remove virtual dispatch from loop', verificationPredicate: 'none', isComment: true };
+}
+
+// ---------------------------------------------------------------------------
+// vec.aliasing — add `__restrict__` to pointer parameters on the function line
+// ---------------------------------------------------------------------------
+function patchVecAliasing(finding: Finding): PatchResult | undefined {
+  const lines = readLines(finding.file);
+  if (!lines) return undefined;
+
+  const lineIdx = finding.line - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
+
+  const original = lines[lineIdx];
+  // Add __restrict__ after each raw pointer type `T*` not already annotated.
+  // Pattern: word chars + optional spaces + `*` followed by a space and identifier.
+  const patched = original.replace(
+    /(\w[\w:<>]*\s*\*(?!\s*__restrict__))\s+(\w)/g,
+    '$1 __restrict__ $2',
+  );
+  if (patched === original) return undefined;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(vscode.Uri.file(finding.file), lineRange(lineIdx), patched);
+  return { edit, description: 'Add `__restrict__` to pointer parameters', verificationPredicate: 'vectorisation_enabled' };
+}
+
+// ---------------------------------------------------------------------------
+// concurrency.mutex-where-atomic — insert a TODO comment on the struct line
+// ---------------------------------------------------------------------------
+function patchMutexWhereAtomic(finding: Finding): PatchResult | undefined {
+  const lines = readLines(finding.file);
+  if (!lines) return undefined;
+
+  const lineIdx = finding.line - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
+
+  const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
+  const comment = `${indent}// TODO(perf-lens): Replace std::mutex + integral with std::atomic<T> for lock-free access.`;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
+  return { edit, description: 'Insert TODO to replace mutex with std::atomic', verificationPredicate: 'none', isComment: true };
 }
 
 // ---------------------------------------------------------------------------

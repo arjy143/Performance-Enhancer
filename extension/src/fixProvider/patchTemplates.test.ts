@@ -31,10 +31,14 @@ function editText(edit: import('vscode').WorkspaceEdit, uri: import('vscode').Ur
 }
 
 describe('patchTemplates — SUPPORTED_RULE_IDS', () => {
-  it('includes all 6 supported rules', () => {
-    expect(SUPPORTED_RULE_IDS.size).toBe(6);
+  it('includes all 10 supported rules', () => {
+    expect(SUPPORTED_RULE_IDS.size).toBe(10);
     expect(SUPPORTED_RULE_IDS.has('perf-lens.noexcept.move-ops')).toBe(true);
     expect(SUPPORTED_RULE_IDS.has('perf-lens.padding.detected')).toBe(true);
+    expect(SUPPORTED_RULE_IDS.has('perf-lens.hotpath.std-function')).toBe(true);
+    expect(SUPPORTED_RULE_IDS.has('perf-lens.hotpath.virtual-dispatch')).toBe(true);
+    expect(SUPPORTED_RULE_IDS.has('perf-lens.vec.aliasing')).toBe(true);
+    expect(SUPPORTED_RULE_IDS.has('perf-lens.concurrency.mutex-where-atomic')).toBe(true);
   });
 
   it('returns undefined for unsupported rule', () => {
@@ -136,6 +140,80 @@ describe('patchTemplates — hotpath.vector-no-reserve', () => {
     const newText = entries[0]?.newText ?? '';
     expect(newText).toContain('reserve');
     expect(newText).toContain('v.reserve');
+    fs.unlinkSync(f);
+  });
+});
+
+describe('patchTemplates — hotpath.std-function', () => {
+  it('inserts TODO comment before the std::function declaration', () => {
+    const src = `void f() {\n    std::function<int()> fn;\n}\n`;
+    const f = tmpFile(src);
+    const finding = makeFinding({ file: f, line: 2, ruleId: 'perf-lens.hotpath.std-function' });
+    const result = buildPatch(finding);
+    expect(result).toBeDefined();
+    expect(result!.isComment).toBe(true);
+    const vscode = require('vscode') as typeof import('vscode');
+    const entries = result!.edit.get(vscode.Uri.file(f));
+    const newText = entries[0]?.newText ?? '';
+    expect(newText).toContain('TODO(perf-lens)');
+    expect(newText).toContain('std::function');
+    fs.unlinkSync(f);
+  });
+});
+
+describe('patchTemplates — hotpath.virtual-dispatch', () => {
+  it('inserts TODO comment before the virtual call line', () => {
+    const src = `void f(Base* b) {\n    for (int i = 0; i < 10; ++i)\n        b->compute();\n}\n`;
+    const f = tmpFile(src);
+    const finding = makeFinding({ file: f, line: 3, ruleId: 'perf-lens.hotpath.virtual-dispatch' });
+    const result = buildPatch(finding);
+    expect(result).toBeDefined();
+    expect(result!.isComment).toBe(true);
+    const vscode = require('vscode') as typeof import('vscode');
+    const entries = result!.edit.get(vscode.Uri.file(f));
+    const newText = entries[0]?.newText ?? '';
+    expect(newText).toContain('TODO(perf-lens)');
+    expect(newText).toContain('Virtual dispatch');
+    fs.unlinkSync(f);
+  });
+});
+
+describe('patchTemplates — vec.aliasing', () => {
+  it('adds __restrict__ to pointer parameters', () => {
+    const src = `void saxpy(float* y, float* x, float a, int n) {}\n`;
+    const f = tmpFile(src);
+    const finding = makeFinding({ file: f, line: 1, ruleId: 'perf-lens.vec.aliasing' });
+    const result = buildPatch(finding);
+    expect(result).toBeDefined();
+    const vscode = require('vscode') as typeof import('vscode');
+    const newText = editText(result!.edit, vscode.Uri.file(f));
+    expect(newText).toContain('__restrict__');
+    fs.unlinkSync(f);
+  });
+
+  it('returns undefined when __restrict__ already present on all pointers', () => {
+    const src = `void saxpy(float* __restrict__ y, float* __restrict__ x, float a) {}\n`;
+    const f = tmpFile(src);
+    const finding = makeFinding({ file: f, line: 1, ruleId: 'perf-lens.vec.aliasing' });
+    const result = buildPatch(finding);
+    expect(result).toBeUndefined();
+    fs.unlinkSync(f);
+  });
+});
+
+describe('patchTemplates — concurrency.mutex-where-atomic', () => {
+  it('inserts TODO comment before the struct declaration', () => {
+    const src = `struct Counter {\n    std::mutex mtx;\n    int count = 0;\n};\n`;
+    const f = tmpFile(src);
+    const finding = makeFinding({ file: f, line: 1, ruleId: 'perf-lens.concurrency.mutex-where-atomic' });
+    const result = buildPatch(finding);
+    expect(result).toBeDefined();
+    expect(result!.isComment).toBe(true);
+    const vscode = require('vscode') as typeof import('vscode');
+    const entries = result!.edit.get(vscode.Uri.file(f));
+    const newText = entries[0]?.newText ?? '';
+    expect(newText).toContain('TODO(perf-lens)');
+    expect(newText).toContain('std::atomic');
     fs.unlinkSync(f);
   });
 });

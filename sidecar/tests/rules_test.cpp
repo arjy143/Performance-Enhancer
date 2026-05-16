@@ -8,12 +8,17 @@
 #include <vector>
 
 #include "rules/finding.hpp"
+#include "rules/store.hpp"
 #include "rules/rule_base.hpp"
 #include "rules/packs/function_attributes/noexcept_move_ops.hpp"
 #include "rules/packs/stl_hygiene/range_for_copy.hpp"
 #include "rules/packs/hotpath/vector_no_reserve.hpp"
+#include "rules/packs/hotpath/std_function.hpp"
+#include "rules/packs/hotpath/virtual_dispatch.hpp"
 #include "rules/packs/memory_layout/padding_detected.hpp"
 #include "rules/packs/constexpr/promotion_variable.hpp"
+#include "rules/packs/vec/aliasing.hpp"
+#include "rules/packs/concurrency/mutex_where_atomic.hpp"
 
 #include <clang/Tooling/Tooling.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
@@ -233,6 +238,216 @@ void f() {
     const int x = get();
     (void)x;
 }
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// StdFunctionRule
+// ---------------------------------------------------------------------------
+
+TEST(StdFunction, FiresOnLocalVariable) {
+    StdFunctionRule rule;
+    const char* src = R"(
+#include <functional>
+void f() {
+    std::function<int()> fn = [] { return 1; };
+    (void)fn;
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.hotpath.std-function");
+    EXPECT_EQ(findings[0].category, FindingCategory::HotPath);
+    EXPECT_EQ(findings[0].confidence, ConfidenceLevel::Medium);
+}
+
+TEST(StdFunction, FiresOnFunctionParameter) {
+    StdFunctionRule rule;
+    const char* src = R"(
+#include <functional>
+void process(std::function<void(int)> cb, int x) {
+    cb(x);
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.hotpath.std-function");
+}
+
+TEST(StdFunction, SilentForTemplateLambda) {
+    StdFunctionRule rule;
+    const char* src = R"(
+template<typename F>
+void process(F&& cb, int x) {
+    cb(x);
+}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// VirtualDispatchInLoopRule
+// ---------------------------------------------------------------------------
+
+TEST(VirtualDispatch, FiresOnVirtualCallInForLoop) {
+    VirtualDispatchInLoopRule rule;
+    const char* src = R"(
+struct Base { virtual int compute() = 0; };
+void f(Base* b, int n) {
+    for (int i = 0; i < n; ++i)
+        b->compute();
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.hotpath.virtual-dispatch");
+    EXPECT_EQ(findings[0].category, FindingCategory::HotPath);
+    EXPECT_NE(findings[0].message.find("compute"), std::string::npos);
+}
+
+TEST(VirtualDispatch, FiresOnVirtualCallInRangeFor) {
+    VirtualDispatchInLoopRule rule;
+    const char* src = R"(
+#include <vector>
+struct Widget { virtual void draw() = 0; };
+void renderAll(std::vector<Widget*>& ws) {
+    for (auto* w : ws)
+        w->draw();
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.hotpath.virtual-dispatch");
+}
+
+TEST(VirtualDispatch, SilentForFinalClass) {
+    VirtualDispatchInLoopRule rule;
+    const char* src = R"(
+struct Base { virtual int compute() = 0; };
+struct Concrete final : Base { int compute() override { return 1; } };
+void f(Concrete* c, int n) {
+    for (int i = 0; i < n; ++i)
+        c->compute();
+}
+)";
+    // Concrete is final — compiler can devirtualise, should not fire.
+    const auto findings = runRule(rule, src);
+    EXPECT_TRUE(findings.empty());
+}
+
+TEST(VirtualDispatch, SilentForNonVirtualCallInLoop) {
+    VirtualDispatchInLoopRule rule;
+    const char* src = R"(
+struct S { int value() const { return 42; } };
+void f(S& s, int n) {
+    for (int i = 0; i < n; ++i)
+        s.value();
+}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// VecAliasingRule
+// ---------------------------------------------------------------------------
+
+TEST(VecAliasing, FiresOnTwoSameTypeWritePointers) {
+    VecAliasingRule rule;
+    const char* src = R"(
+void add(float* a, const float* b, int n) {
+    for (int i = 0; i < n; ++i)
+        a[i] += b[i];
+}
+)";
+    // 'a' is float* (writable), 'b' is const float* — only one writable pointer.
+    // Should NOT fire (only one non-const pointer).
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+TEST(VecAliasing, FiresOnTwoWritablePointersOfSameType) {
+    VecAliasingRule rule;
+    const char* src = R"(
+void saxpy(float* y, float* x, float a, int n) {
+    for (int i = 0; i < n; ++i)
+        y[i] += a * x[i];
+}
+)";
+    // Both y and x are float* — aliasing assumed.
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.vec.aliasing");
+    EXPECT_EQ(findings[0].category, FindingCategory::HotPath);
+    EXPECT_NE(findings[0].message.find("__restrict__"), std::string::npos);
+}
+
+TEST(VecAliasing, SilentWhenRestrictPresent) {
+    VecAliasingRule rule;
+    const char* src = R"(
+void saxpy(float* __restrict__ y, float* __restrict__ x, float a, int n) {
+    for (int i = 0; i < n; ++i)
+        y[i] += a * x[i];
+}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+TEST(VecAliasing, SilentForDifferentTypes) {
+    VecAliasingRule rule;
+    const char* src = R"(
+void convert(float* dst, int* src, int n) {
+    for (int i = 0; i < n; ++i)
+        dst[i] = static_cast<float>(src[i]);
+}
+)";
+    // Different pointee types — no same-type aliasing concern.
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// MutexWhereAtomicRule
+// ---------------------------------------------------------------------------
+
+TEST(MutexWhereAtomic, FiresOnSingleIntegerGuard) {
+    MutexWhereAtomicRule rule;
+    const char* src = R"(
+#include <mutex>
+struct Counter {
+    std::mutex mtx;
+    int count = 0;
+};
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.concurrency.mutex-where-atomic");
+    EXPECT_EQ(findings[0].confidence, ConfidenceLevel::Low);
+    EXPECT_NE(findings[0].message.find("std::atomic"), std::string::npos);
+}
+
+TEST(MutexWhereAtomic, SilentForMultipleDataFields) {
+    MutexWhereAtomicRule rule;
+    const char* src = R"(
+#include <mutex>
+#include <string>
+struct Cache {
+    std::mutex mtx;
+    int hits;
+    int misses;
+    std::string label;  // non-integral — too complex for atomic
+};
+)";
+    // More than 2 non-mutex fields — heuristic doesn't fire.
+    const auto findings = runRule(rule, src);
+    EXPECT_TRUE(findings.empty());
+}
+
+TEST(MutexWhereAtomic, SilentForNoMutex) {
+    MutexWhereAtomicRule rule;
+    const char* src = R"(
+struct Plain {
+    int x;
+    int y;
+};
 )";
     EXPECT_TRUE(runRule(rule, src).empty());
 }

@@ -9,8 +9,12 @@
 #include "packs/stl_hygiene/range_for_copy.hpp"
 #include "packs/stl_hygiene/endl_flush.hpp"
 #include "packs/hotpath/vector_no_reserve.hpp"
+#include "packs/hotpath/std_function.hpp"
+#include "packs/hotpath/virtual_dispatch.hpp"
 #include "packs/memory_layout/padding_detected.hpp"
 #include "packs/constexpr/promotion_variable.hpp"
+#include "packs/vec/aliasing.hpp"
+#include "packs/concurrency/mutex_where_atomic.hpp"
 
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Tooling/JSONCompilationDatabase.h>
@@ -22,8 +26,12 @@ RuleEngine::RuleEngine() {
     _rules.push_back(std::make_unique<RangeForCopyRule>());
     _rules.push_back(std::make_unique<EndlFlushRule>());
     _rules.push_back(std::make_unique<VectorNoReserveRule>());
+    _rules.push_back(std::make_unique<StdFunctionRule>());
+    _rules.push_back(std::make_unique<VirtualDispatchInLoopRule>());
     _rules.push_back(std::make_unique<PaddingDetectedRule>());
     _rules.push_back(std::make_unique<PromotionVariableRule>());
+    _rules.push_back(std::make_unique<VecAliasingRule>());
+    _rules.push_back(std::make_unique<MutexWhereAtomicRule>());
 }
 
 std::vector<Finding> RuleEngine::analyseFile(

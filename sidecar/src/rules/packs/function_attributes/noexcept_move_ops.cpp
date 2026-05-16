@@ -29,11 +29,10 @@ public:
         if (!sm.isInMainFile(method->getLocation())) return;
 
         const auto loc = sm.getPresumedLoc(method->getLocation());
-        const bool isMoveCtorOrAssign =
-            method->isMoveConstructor() ||
-            (isa<CXXMethodDecl>(method) &&
-             method->isMoveAssignmentOperator());
-        if (!isMoveCtorOrAssign) return;
+        // The matcher guarantees it's a move ctor or move assignment;
+        // distinguish them via dynamic type (isMoveConstructor lives on CXXConstructorDecl in LLVM 19).
+        const bool isMoveCtor = isa<CXXConstructorDecl>(method);
+        if (!isMoveCtor && !method->isMoveAssignmentOperator()) return;
 
         std::string cls;
         if (const auto* rd = method->getParent())
@@ -43,7 +42,7 @@ public:
         f.rule_id    = _rule_id;
         f.title      = _title;
         f.message    = "Move " +
-                       std::string(method->isMoveConstructor() ? "constructor" : "assignment") +
+                       std::string(isMoveCtor ? "constructor" : "assignment") +
                        " of '" + cls + "' is not noexcept — std::vector reallocation will copy instead of move";
         f.file       = loc.getFilename();
         f.line       = static_cast<int>(loc.getLine());
@@ -68,16 +67,24 @@ void NoexceptMoveOpsRule::registerMatchers(MatchFinder& finder,
     _build_id = build_id;
     _findings.clear();
 
-    // Match move constructors and move assignment operators that are NOT noexcept.
+    // isMoveConstructor() is Matcher<CXXConstructorDecl> in LLVM 19 — match separately.
+    auto* cb = new Callback(_findings, _build_id, id(), title());
     finder.addMatcher(
-        cxxMethodDecl(
-            anyOf(isMoveConstructor(), isMoveAssignmentOperator()),
-            unless(isNoexcept()),
+        cxxConstructorDecl(
+            isMoveConstructor(),
+            unless(isNoThrow()),
             isDefinition(),
             unless(isDeleted()),
             unless(isImplicit())
-        ).bind("method"),
-        new Callback(_findings, _build_id, id(), title()));
+        ).bind("method"), cb);
+    finder.addMatcher(
+        cxxMethodDecl(
+            isMoveAssignmentOperator(),
+            unless(isNoThrow()),
+            isDefinition(),
+            unless(isDeleted()),
+            unless(isImplicit())
+        ).bind("method"), cb);
 }
 
 std::vector<Finding> NoexceptMoveOpsRule::takeFindings() {

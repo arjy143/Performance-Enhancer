@@ -17,6 +17,7 @@ class AstProject {
 public:
     // Throws std::runtime_error if compile_commands.json cannot be found.
     explicit AstProject(const std::filesystem::path& workspace);
+    ~AstProject(); // defined in .cpp where CompilationDatabase is complete
 
     // Compiler args for a specific source file.
     // Returns empty vector if the file isn't in the database.

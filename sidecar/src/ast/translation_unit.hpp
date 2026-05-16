@@ -20,6 +20,7 @@ class TranslationUnit {
 public:
     TranslationUnit(const std::string& file,
                     clang::tooling::CompilationDatabase& db);
+    ~TranslationUnit(); // defined in .cpp where ASTUnit is complete
 
     // Run the matcher finder against this TU, re-parsing if stale.
     // Returns false if parsing failed.

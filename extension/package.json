@@ -2,7 +2,7 @@
   "name": "perf-lens",
   "displayName": "Perf Lens",
   "description": "C++ performance advisor: static analysis, compiler remarks, and profile-guided optimisation — all in VS Code.",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "publisher": "perf-lens",
   "private": true,
   "engines": {
@@ -100,6 +100,14 @@
       {
         "command": "perfLens.synthesiseHotness",
         "title": "Perf Lens: Synthesise Top Recommendations (AI)"
+      },
+      {
+        "command": "perfLens.exportSarif",
+        "title": "Perf Lens: Export Findings as SARIF…"
+      },
+      {
+        "command": "perfLens.diagnosticBundle",
+        "title": "Perf Lens: Export Diagnostic Bundle…"
       }
     ],
     "menus": {

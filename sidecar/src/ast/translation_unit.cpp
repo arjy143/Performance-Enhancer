@@ -5,6 +5,7 @@
 
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Frontend/ASTUnit.h>
+#include <clang/Frontend/CompilerInstance.h>
 #include <clang/Tooling/Tooling.h>
 #include <clang/Tooling/JSONCompilationDatabase.h>
 #include <llvm/Support/raw_ostream.h>
@@ -16,6 +17,8 @@ namespace perf_lens::ast {
 TranslationUnit::TranslationUnit(const std::string& file,
                                   clang::tooling::CompilationDatabase& db)
     : _file(file), _db(db) {}
+
+TranslationUnit::~TranslationUnit() = default; // ASTUnit complete here
 
 bool TranslationUnit::_isStale() const {
     if (!_unit) return true;
@@ -46,22 +49,23 @@ bool TranslationUnit::_parse() {
         argv.data(), argv.data() + argv.size(),
         std::make_shared<clang::PCHContainerOperations>(),
         diags,
-        /*ResourceFilesPath=*/ "",
-        /*OnlyLocalDecls=*/    false,
-        /*CaptureDiagnostics=*/clang::CaptureDiagsKind::None,
-        /*RemappedFiles=*/     {},
-        /*RemappedFilesKeepOriginalName=*/ true,
-        /*PrecompilePreamble=*/ 0,
+        /*ResourceFilesPath=*/              "",
+        /*StorePreamblesInMemory=*/         false,
+        /*PreambleStoragePath=*/            llvm::StringRef(),
+        /*OnlyLocalDecls=*/                 false,
+        /*CaptureDiagnostics=*/             clang::CaptureDiagsKind::None,
+        /*RemappedFiles=*/                  std::nullopt,
+        /*RemappedFilesKeepOriginalName=*/  true,
+        /*PrecompilePreambleAfterNParses=*/ 0,
         clang::TU_Complete,
-        /*CacheCodeCompletionResults=*/ false,
+        /*CacheCodeCompletionResults=*/     false,
         /*IncludeBriefCommentsInCodeCompletion=*/ false,
-        /*AllowPCHWithCompilerErrors=*/ false,
+        /*AllowPCHWithCompilerErrors=*/     false,
         clang::SkipFunctionBodiesScope::None,
-        /*SingleFileParse=*/   false,
-        /*UserFilesAreVolatile=*/ true,
-        /*ForSerialization=*/  false,
-        /*RetainExcludedConditionalBlocks=*/ false,
-        /*FailedParseDiagnosticClient=*/     nullptr);
+        /*SingleFileParse=*/                false,
+        /*UserFilesAreVolatile=*/           true,
+        /*ForSerialization=*/               false,
+        /*RetainExcludedConditionalBlocks=*/ false);
 
     if (!_unit) {
         Logger::instance().warn("TU: failed to parse " + _file);

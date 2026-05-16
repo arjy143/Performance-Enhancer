@@ -8,6 +8,8 @@
 
 namespace perf_lens::ast {
 
+AstProject::~AstProject() = default; // CompilationDatabase complete here
+
 AstProject::AstProject(const std::filesystem::path& workspace) {
     // Search common build output locations for compile_commands.json.
     const std::vector<std::filesystem::path> candidates = {
