@@ -1,2 +1,29 @@
 CLAUDE.md
 claude/
+
+# Node / pnpm
+node_modules/
+dist/
+out/
+*.vsix
+pnpm-lock.yaml
+
+# C++ build artefacts
+sidecar/build/
+sidecar/cmake-build-*/
+
+# Rust (profile-tools, Phase 6+)
+target/
+
+# Runtime cache
+.perf-lens/
+*.sqlite
+
+# IDE overrides (keep project-level settings out)
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

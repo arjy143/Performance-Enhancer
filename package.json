@@ -1,0 +1,15 @@
+{
+  "name": "perf-lens-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter perf-lens run dev",
+    "build": "pnpm --filter perf-lens run build",
+    "test": "pnpm --filter perf-lens run test && pnpm --filter integration-tests run test",
+    "typecheck": "pnpm --filter perf-lens run typecheck"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

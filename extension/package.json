@@ -1,0 +1,114 @@
+{
+  "name": "perf-lens",
+  "displayName": "Perf Lens",
+  "description": "C++ performance advisor: static analysis, compiler remarks, and profile-guided optimisation — all in VS Code.",
+  "version": "0.1.0",
+  "publisher": "perf-lens",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Linters", "Other"],
+  "activationEvents": [
+    "onLanguage:cpp",
+    "onLanguage:c",
+    "workspaceContains:**/compile_commands.json",
+    "workspaceContains:**/CMakeLists.txt"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "perfLens.analyseFile",
+        "title": "Perf Lens: Analyse This File"
+      },
+      {
+        "command": "perfLens.showPerfPanel",
+        "title": "Perf Lens: Show Performance Panel"
+      }
+    ],
+    "configuration": {
+      "title": "Perf Lens",
+      "properties": {
+        "perfLens.analyseOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically analyse files on save."
+        },
+        "perfLens.analyseOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically analyse files when opened."
+        },
+        "perfLens.minConfidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "default": "medium",
+          "description": "Minimum confidence level for displayed findings."
+        },
+        "perfLens.llm.primary": {
+          "type": "string",
+          "default": "",
+          "description": "Primary LLM provider in the form 'provider:model' (e.g. 'ollama:qwen2.5-coder:7b')."
+        },
+        "perfLens.compiler.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the C++ compiler (empty = auto-detect from PATH)."
+        },
+        "perfLens.godbolt.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable opt-in integration with godbolt.org."
+        },
+        "perfLens.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Send anonymous usage statistics (off by default)."
+        },
+        "perfLens.ui.showGutterHeatmap": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show hotness heatmap in the editor gutter when a profile is loaded."
+        },
+        "perfLens.ui.maxFindingsPerFile": {
+          "type": "number",
+          "default": 50,
+          "description": "Maximum number of findings shown per file."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "dev": "pnpm run build && code-insiders --extensionDevelopmentPath=$(pwd)",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --platform=node --target=node20 --sourcemap",
+    "watch": "pnpm run build -- --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.12.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/*.test.ts"],
+    "moduleNameMapper": {
+      "^vscode$": "<rootDir>/src/__mocks__/vscode.ts"
+    }
+  }
+}
