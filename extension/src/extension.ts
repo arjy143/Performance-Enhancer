@@ -14,8 +14,14 @@ import { RemarksTreeDataProvider } from './panels/remarksPanel';
 import { OptRecordsWatcher } from './build/watcher';
 import { LLMManager, readSnippet } from './llm/manager';
 import { ExplanationPanel } from './panels/explanationPanel';
+import { AsmDiffPanel } from './panels/asmDiffPanel';
+import { CacheLinePanel } from './panels/cacheLinePanel';
+import { LoopAnalyserPanel } from './panels/loopAnalyserPanel';
+import { PerfLensCodeActionProvider } from './fixProvider/codeActionProvider';
+import { buildPatch } from './fixProvider/patchTemplates';
+import { verifyPatch } from './fixProvider/verifier';
 import type { ProviderConfig } from './llm/types';
-import type { OptRemark, Finding } from './sidecar/protocol';
+import type { OptRemark, Finding, AsmDiff, CompileResult } from './sidecar/protocol';
 
 let _lifecycle: SidecarLifecycle | undefined;
 
@@ -165,6 +171,67 @@ async function _initialiseAsync(
       llm.clearCache();
       void vscode.window.showInformationMessage('Perf Lens: LLM cache cleared.');
     }),
+
+    // Phase 5: code actions
+    vscode.languages.registerCodeActionsProvider(
+      [{ language: 'cpp' }, { language: 'c' }],
+      new PerfLensCodeActionProvider(sidecar),
+      { providedCodeActionKinds: PerfLensCodeActionProvider.providedCodeActionKinds },
+    ),
+
+    vscode.commands.registerCommand('perfLens.applyFix', async (finding: Finding) => {
+      const patch = buildPatch(finding);
+      if (!patch) {
+        void vscode.window.showWarningMessage('Perf Lens: No fix template for this rule.');
+        return;
+      }
+      await vscode.workspace.applyEdit(patch.edit);
+      void vscode.window.showInformationMessage(`Perf Lens: Applied — ${patch.description}`);
+    }),
+
+    vscode.commands.registerCommand('perfLens.verifyFix', async (finding: Finding) => {
+      const patch = buildPatch(finding);
+      if (!patch) {
+        void vscode.window.showWarningMessage('Perf Lens: No fix template for this rule.');
+        return;
+      }
+      statusBar.setStarting();
+      const ctrl   = new AbortController();
+      const result = await verifyPatch(finding, patch, sidecar, ctrl.signal);
+      statusBar.setReady();
+      if (!result) {
+        void vscode.window.showErrorMessage('Perf Lens: Verification failed — could not compile.');
+        return;
+      }
+      const panel = AsmDiffPanel.show(ctx);
+      panel.render(patch.description, result.before, result.after, result.diff, result.verified);
+      if (result.verified) {
+        const choice = await vscode.window.showInformationMessage(
+          `Perf Lens: Fix verified — ${result.reason}`,
+          'Apply Fix', 'Dismiss',
+        );
+        if (choice === 'Apply Fix') {
+          await vscode.workspace.applyEdit(patch.edit);
+        }
+      } else {
+        void vscode.window.showWarningMessage(`Perf Lens: Fix not verified — ${result.reason}`);
+      }
+    }),
+
+    vscode.commands.registerCommand('perfLens.showCacheLineLayout', (finding: Finding) => {
+      const panel = CacheLinePanel.show(ctx);
+      panel.render(finding);
+    }),
+
+    vscode.commands.registerCommand('perfLens.openLoopAnalyser', async (finding: Finding) => {
+      const panel = LoopAnalyserPanel.show(ctx);
+      const ctrl  = new AbortController();
+      let remarks: OptRemark[] = [];
+      try {
+        remarks = await sidecar.request<OptRemark[]>('getRemarks', { file: finding.file, line: finding.line });
+      } catch { /* ignore */ }
+      await panel.loadForFinding(finding, remarks, sidecar, ctrl.signal);
+    }),
   );
 
   // Seed diagnostics for the currently open file
@@ -177,7 +244,7 @@ async function _initialiseAsync(
   }
 
   statusBar.setReady();
-  logger.info('Perf Lens ready (Phase 4).');
+  logger.info('Perf Lens ready (Phase 5).');
 }
 
 function _initLLMProviders(llm: LLMManager): void {

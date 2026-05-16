@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(perf-lens-sidecar VERSION 0.3.0 LANGUAGES C CXX)
+project(perf-lens-sidecar VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -78,6 +78,11 @@ add_library(perf-lens-sidecar-lib STATIC
   src/rules/finding.cpp
   src/rules/store.cpp
   src/shadow_compile.cpp
+  # Phase 5: Godbolt-Lite (always built — no LLVM dependency)
+  src/godbolt/asm_parser.cpp
+  src/godbolt/diff_engine.cpp
+  src/godbolt/compile_cache.cpp
+  src/godbolt/compiler.cpp
 )
 
 target_include_directories(perf-lens-sidecar-lib PUBLIC src)

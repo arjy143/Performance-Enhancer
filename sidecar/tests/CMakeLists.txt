@@ -11,6 +11,7 @@ add_executable(perf-lens-sidecar-tests
   ping_test.cpp
   remarks_parser_test.cpp
   rules_test.cpp
+  godbolt_test.cpp
 )
 
 target_link_libraries(perf-lens-sidecar-tests PRIVATE

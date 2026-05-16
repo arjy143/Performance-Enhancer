@@ -2,7 +2,7 @@
   "name": "perf-lens",
   "displayName": "Perf Lens",
   "description": "C++ performance advisor: static analysis, compiler remarks, and profile-guided optimisation — all in VS Code.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "perf-lens",
   "private": true,
   "engines": {
@@ -64,6 +64,22 @@
       {
         "command": "perfLens.clearLLMCache",
         "title": "Perf Lens: Clear LLM Cache"
+      },
+      {
+        "command": "perfLens.applyFix",
+        "title": "Perf Lens: Apply Fix"
+      },
+      {
+        "command": "perfLens.verifyFix",
+        "title": "Perf Lens: Verify Fix (Preview Asm Diff)"
+      },
+      {
+        "command": "perfLens.showCacheLineLayout",
+        "title": "Perf Lens: Show Cache-Line Layout"
+      },
+      {
+        "command": "perfLens.openLoopAnalyser",
+        "title": "Perf Lens: Open Loop Analyser"
       }
     ],
     "menus": {
@@ -129,6 +145,12 @@
           "type": "number",
           "default": 80,
           "description": "Show a warning in the status bar when this percentage of the budget has been consumed."
+        },
+        "perfLens.godbolt.extraFlags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["-O2", "-std=c++20"],
+          "description": "Extra flags passed to the compiler when compiling snippets for verification and the Loop Analyser."
         },
         "perfLens.compiler.path": {
           "type": "string",

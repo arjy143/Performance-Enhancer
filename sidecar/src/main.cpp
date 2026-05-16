@@ -6,6 +6,8 @@
 #include "rules/finding.hpp"
 #include "rules/store.hpp"
 #include "shadow_compile.hpp"
+#include "godbolt/compiler.hpp"
+#include "godbolt/diff_engine.hpp"
 
 #ifdef PERF_LENS_HAVE_LLVM
 #include "ast/project.hpp"
@@ -45,6 +47,56 @@ perf_lens::json remarkToJson(const perf_lens::remarks::OptRemark& r) {
     };
 }
 
+perf_lens::json sourceMappingToJson(const perf_lens::godbolt::SourceMapping& m) {
+    return {
+        {"asmLineStart",  m.asm_line_start},
+        {"asmLineEnd",    m.asm_line_end},
+        {"sourceLine",    m.source_line},
+        {"sourceColumn",  m.source_column},
+        {"sourceFile",    m.source_file},
+        {"inlineDepth",   m.inline_depth},
+    };
+}
+
+perf_lens::json assemblyOutputToJson(const perf_lens::godbolt::AssemblyOutput& a) {
+    perf_lens::json maps = perf_lens::json::array();
+    for (const auto& m : a.source_map) maps.push_back(sourceMappingToJson(m));
+    return {
+        {"text",           a.text},
+        {"sourceMap",      maps},
+        {"vectorWidthUsed", a.vector_width_used},
+    };
+}
+
+perf_lens::json instructionDiffToJson(const perf_lens::godbolt::InstructionDiff& d) {
+    std::string kind;
+    switch (d.kind) {
+        case perf_lens::godbolt::InstructionDiff::Kind::Added:     kind = "added";     break;
+        case perf_lens::godbolt::InstructionDiff::Kind::Removed:   kind = "removed";   break;
+        case perf_lens::godbolt::InstructionDiff::Kind::Unchanged: kind = "unchanged"; break;
+    }
+    return {
+        {"kind",        kind},
+        {"beforeText",  d.before_text},
+        {"afterText",   d.after_text},
+        {"category",    d.category},
+    };
+}
+
+perf_lens::json asmDiffToJson(const perf_lens::godbolt::AsmDiff& d) {
+    perf_lens::json changes = perf_lens::json::array();
+    for (const auto& c : d.changes) changes.push_back(instructionDiffToJson(c));
+    return {
+        {"changes",               changes},
+        {"instructionsBefore",    d.instructions_before},
+        {"instructionsAfter",     d.instructions_after},
+        {"vectorWidthBefore",     d.vector_width_before},
+        {"vectorWidthAfter",      d.vector_width_after},
+        {"vectorisationImproved", d.vectorisation_improved},
+        {"summary",               d.summary},
+    };
+}
+
 perf_lens::json findingToJson(const perf_lens::rules::Finding& f) {
     return {
         {"ruleId",     f.rule_id},
@@ -72,6 +124,7 @@ int main(int argc, char* argv[]) {
     perf_lens::remarks::RemarkStore remarkStore(workspace / ".perf-lens" / "cache.sqlite");
     perf_lens::rules::FindingStore  findingStore(workspace / ".perf-lens" / "findings.sqlite");
     perf_lens::ShadowCompiler shadow(workspace);
+    perf_lens::godbolt::GodBoltCompiler godBolt(workspace);
     perf_lens::RpcServer server;
 
 #ifdef PERF_LENS_HAVE_LLVM
@@ -212,8 +265,77 @@ int main(int argc, char* argv[]) {
     });
 
     // -----------------------------------------------------------------------
+    // Phase 5: Godbolt-Lite
+    // -----------------------------------------------------------------------
 
-    perf_lens::json capabilities = perf_lens::json::array({"remarks"});
+    server.register_method("compileSnippet",
+        [&godBolt](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto source   = params.value("source",  std::string{});
+        const bool run_mca  = params.value("runMca",  false);
+        if (source.empty()) throw std::invalid_argument("source is required");
+
+        std::vector<std::string> flags;
+        if (params.contains("flags") && params["flags"].is_array()) {
+            for (const auto& f : params["flags"]) {
+                if (f.is_string()) flags.push_back(f.get<std::string>());
+            }
+        }
+
+        const auto result = godBolt.compile(source, flags, run_mca);
+
+        perf_lens::json diags = perf_lens::json::array();
+        for (const auto& d : result.diagnostics) {
+            diags.push_back({{"line", d.line}, {"column", d.column},
+                             {"level", d.level}, {"message", d.message}});
+        }
+
+        perf_lens::json out = {
+            {"success",     result.success},
+            {"assembly",    assemblyOutputToJson(result.assembly)},
+            {"diagnostics", diags},
+            {"contentHash", result.content_hash},
+            {"fromCache",   result.from_cache},
+            {"wallTimeMs",  result.wall_time.count()},
+            {"stderr",      result.stderr_output},
+        };
+        if (result.mca) {
+            out["mca"] = {
+                {"ipc",                result.mca->ipc},
+                {"cyclesPerIteration", result.mca->cycles_per_iteration},
+                {"bottleneck",         result.mca->bottleneck},
+            };
+        }
+        return out;
+    });
+
+    server.register_method("diffAsm",
+        [](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto before_text = params.value("beforeText", std::string{});
+        const auto after_text  = params.value("afterText",  std::string{});
+        const int  vw_before   = params.value("vectorWidthBefore", 1);
+        const int  vw_after    = params.value("vectorWidthAfter",  1);
+
+        const auto before_instrs = perf_lens::godbolt::extractInstructions(before_text);
+        const auto after_instrs  = perf_lens::godbolt::extractInstructions(after_text);
+        const auto diff = perf_lens::godbolt::diffInstructions(
+            before_instrs, after_instrs, vw_before, vw_after);
+        return asmDiffToJson(diff);
+    });
+
+    server.register_method("compilerAvailable",
+        [&godBolt](const perf_lens::json&) -> perf_lens::json
+    {
+        return {
+            {"available",     godBolt.available()},
+            {"compilerPath",  godBolt.compilerPath()},
+        };
+    });
+
+    // -----------------------------------------------------------------------
+
+    perf_lens::json capabilities = perf_lens::json::array({"remarks", "godBoltLite"});
 #ifdef PERF_LENS_HAVE_LLVM
     if (ruleEngine) capabilities.push_back("staticAnalysis");
 #endif

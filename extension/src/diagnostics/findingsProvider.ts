@@ -3,6 +3,7 @@ import { type SidecarClient } from '../sidecar/client';
 import {
   type Finding,
   ConfidenceLevel,
+  FindingCategory,
   FINDING_CATEGORY_LABELS,
   CONFIDENCE_LABELS,
 } from '../sidecar/protocol';
@@ -22,13 +23,20 @@ function findingToMarkdown(f: Finding): vscode.MarkdownString {
   const cat  = FINDING_CATEGORY_LABELS[f.category] ?? 'Other';
   const conf = CONFIDENCE_LABELS[f.confidence] ?? 'unknown';
   const args = encodeURIComponent(JSON.stringify(f));
+  const extraLinks: string[] = [
+    `[$(sparkle) Explain with AI](command:perfLens.explainFinding?${args})`,
+    `[$(wrench) Open Loop Analyser](command:perfLens.openLoopAnalyser?${args})`,
+  ];
+  if (f.category === FindingCategory.MemoryLayout) {
+    extraLinks.push(`[$(layout) Cache-Line Layout](command:perfLens.showCacheLineLayout?${args})`);
+  }
   const md = new vscode.MarkdownString(
     `**$(lightbulb) ${f.title}**\n\n${f.message}\n\n` +
     `| | |\n|---|---|\n` +
     `| Category | ${cat} |\n` +
     `| Confidence | ${conf} |\n` +
     `| Rule | \`${f.ruleId}\` |\n\n` +
-    `[$(sparkle) Explain with AI](command:perfLens.explainFinding?${args})`,
+    extraLinks.join(' · '),
     true,
   );
   md.isTrusted = true;

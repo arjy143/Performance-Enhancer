@@ -156,6 +156,79 @@ export interface AnalyseFileResult { count: number; buildId: string }
 export interface GetFindingsParams { file: string; line?: number }
 // returns Finding[]
 
+// Godbolt-Lite (Phase 5)
+
+export interface SourceMapping {
+  asmLineStart:  number;
+  asmLineEnd:    number;
+  sourceLine:    number;
+  sourceColumn:  number;
+  sourceFile:    string;
+  inlineDepth:   number;
+}
+
+export interface AssemblyOutput {
+  text:            string;
+  sourceMap:       SourceMapping[];
+  vectorWidthUsed: number;  // 1=scalar 4=xmm 8=ymm 16=zmm
+}
+
+export interface CompileDiagnostic {
+  line:    number;
+  column:  number;
+  level:   'error' | 'warning' | 'note';
+  message: string;
+}
+
+export interface MCAReport {
+  ipc:                 number;
+  cyclesPerIteration:  number;
+  bottleneck:          string;
+}
+
+export interface CompileResult {
+  success:     boolean;
+  assembly:    AssemblyOutput;
+  diagnostics: CompileDiagnostic[];
+  mca?:        MCAReport;
+  contentHash: string;
+  fromCache:   boolean;
+  wallTimeMs:  number;
+  stderr:      string;
+}
+
+export type InstructionDiffKind = 'added' | 'removed' | 'unchanged';
+
+export interface InstructionDiff {
+  kind:        InstructionDiffKind;
+  beforeText:  string;
+  afterText:   string;
+  category:    string;  // "vectorised" | "eliminated" | ""
+}
+
+export interface AsmDiff {
+  changes:               InstructionDiff[];
+  instructionsBefore:    number;
+  instructionsAfter:     number;
+  vectorWidthBefore:     number;
+  vectorWidthAfter:      number;
+  vectorisationImproved: boolean;
+  summary:               string;
+}
+
+export interface CompileSnippetParams {
+  source: string;
+  flags?: string[];
+  runMca?: boolean;
+}
+
+export interface DiffAsmParams {
+  beforeText:         string;
+  afterText:          string;
+  vectorWidthBefore?: number;
+  vectorWidthAfter?:  number;
+}
+
 export function isRpcResponse(msg: unknown): msg is RpcResponse {
   if (typeof msg !== 'object' || msg === null) return false;
   const m = msg as Record<string, unknown>;
