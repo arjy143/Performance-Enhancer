@@ -100,6 +100,62 @@ export interface RecompileWithRemarksResult { remarksFile: string; count: number
 // returns string[]
 export interface GetRemarkedFilesResult { files: string[] }
 
+// Static analysis findings (Phase 3)
+
+export const FindingCategory = {
+  MemoryLayout:   0,
+  Vectorisation:  1,
+  Constexpr:      2,
+  HotPath:        3,
+  FunctionAttrib: 4,
+  StlHygiene:     5,
+  Concurrency:    6,
+  UndefinedBeh:   7,
+  Build:          8,
+  Other:          9,
+} as const;
+export type FindingCategory = typeof FindingCategory[keyof typeof FindingCategory];
+
+export const ConfidenceLevel = { High: 0, Medium: 1, Low: 2 } as const;
+export type ConfidenceLevel = typeof ConfidenceLevel[keyof typeof ConfidenceLevel];
+
+export const FINDING_CATEGORY_LABELS: Record<FindingCategory, string> = {
+  [FindingCategory.MemoryLayout]:   'Memory Layout',
+  [FindingCategory.Vectorisation]:  'Vectorisation',
+  [FindingCategory.Constexpr]:      'Constexpr',
+  [FindingCategory.HotPath]:        'Hot Path',
+  [FindingCategory.FunctionAttrib]: 'Function Attributes',
+  [FindingCategory.StlHygiene]:     'STL Hygiene',
+  [FindingCategory.Concurrency]:    'Concurrency',
+  [FindingCategory.UndefinedBeh]:   'Undefined Behaviour',
+  [FindingCategory.Build]:          'Build',
+  [FindingCategory.Other]:          'Other',
+};
+
+export const CONFIDENCE_LABELS: Record<ConfidenceLevel, string> = {
+  [ConfidenceLevel.High]:   'high',
+  [ConfidenceLevel.Medium]: 'medium',
+  [ConfidenceLevel.Low]:    'low',
+};
+
+export interface Finding {
+  ruleId:     string;
+  title:      string;
+  message:    string;
+  file:       string;
+  line:       number;
+  column:     number;
+  category:   FindingCategory;
+  confidence: ConfidenceLevel;
+  buildId:    string;
+}
+
+export interface AnalyseFileParams { file: string; buildId?: string }
+export interface AnalyseFileResult { count: number; buildId: string }
+
+export interface GetFindingsParams { file: string; line?: number }
+// returns Finding[]
+
 export function isRpcResponse(msg: unknown): msg is RpcResponse {
   if (typeof msg !== 'object' || msg === null) return false;
   const m = msg as Record<string, unknown>;

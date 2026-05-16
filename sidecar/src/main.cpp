@@ -3,7 +3,14 @@
 #include "remarks/parser.hpp"
 #include "remarks/gcc_parser.hpp"
 #include "remarks/store.hpp"
+#include "rules/finding.hpp"
+#include "rules/store.hpp"
 #include "shadow_compile.hpp"
+
+#ifdef PERF_LENS_HAVE_LLVM
+#include "ast/project.hpp"
+#include "rules/engine.hpp"
+#endif
 
 #include <cstdlib>
 #include <filesystem>
@@ -38,6 +45,20 @@ perf_lens::json remarkToJson(const perf_lens::remarks::OptRemark& r) {
     };
 }
 
+perf_lens::json findingToJson(const perf_lens::rules::Finding& f) {
+    return {
+        {"ruleId",     f.rule_id},
+        {"title",      f.title},
+        {"message",    f.message},
+        {"file",       f.file},
+        {"line",       f.line},
+        {"column",     f.column},
+        {"category",   static_cast<int>(f.category)},
+        {"confidence", static_cast<int>(f.confidence)},
+        {"buildId",    f.build_id},
+    };
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -45,12 +66,27 @@ int main(int argc, char* argv[]) {
 
     auto& log = perf_lens::Logger::instance();
     log.init(workspace / ".perf-lens" / "logs");
-    log.info("perf-lens-sidecar v0.2.0 starting");
+    log.info("perf-lens-sidecar v0.3.0 starting");
     log.info(std::string("workspace: ") + workspace.string());
 
-    perf_lens::remarks::RemarkStore store(workspace / ".perf-lens" / "cache.sqlite");
+    perf_lens::remarks::RemarkStore remarkStore(workspace / ".perf-lens" / "cache.sqlite");
+    perf_lens::rules::FindingStore  findingStore(workspace / ".perf-lens" / "findings.sqlite");
     perf_lens::ShadowCompiler shadow(workspace);
     perf_lens::RpcServer server;
+
+#ifdef PERF_LENS_HAVE_LLVM
+    std::unique_ptr<perf_lens::ast::AstProject>  astProject;
+    std::unique_ptr<perf_lens::rules::RuleEngine> ruleEngine;
+
+    try {
+        astProject  = std::make_unique<perf_lens::ast::AstProject>(workspace);
+        ruleEngine  = std::make_unique<perf_lens::rules::RuleEngine>();
+        log.info("Static analysis rules enabled (" +
+                 std::to_string(ruleEngine->ruleIds().size()) + " rules loaded)");
+    } catch (const std::exception& e) {
+        log.warn(std::string("Static analysis unavailable: ") + e.what());
+    }
+#endif
 
     // -----------------------------------------------------------------------
     // Phase 1 methods
@@ -69,7 +105,7 @@ int main(int argc, char* argv[]) {
     // -----------------------------------------------------------------------
 
     server.register_method("ingestRemarksFile",
-        [&store](const perf_lens::json& params) -> perf_lens::json
+        [&remarkStore](const perf_lens::json& params) -> perf_lens::json
     {
         const auto path     = params.value("path",    std::string{});
         const auto build_id = params.value("buildId", std::string{"manual"});
@@ -84,32 +120,32 @@ int main(int argc, char* argv[]) {
         else
             remarks = perf_lens::remarks::parseGccOptInfo(path, build_id);
 
-        const int count = store.insertBulk(remarks);
+        const int count = remarkStore.insertBulk(remarks);
         return {{"count", count}, {"buildId", build_id}};
     });
 
     server.register_method("getRemarks",
-        [&store](const perf_lens::json& params) -> perf_lens::json
+        [&remarkStore](const perf_lens::json& params) -> perf_lens::json
     {
         const auto file = params.value("file", std::string{});
         if (file.empty()) throw std::invalid_argument("file is required");
         const int line = params.value("line", -1);
 
-        const auto remarks = store.getRemarks(file, line);
+        const auto remarks = remarkStore.getRemarks(file, line);
         perf_lens::json arr = perf_lens::json::array();
         for (const auto& r : remarks) arr.push_back(remarkToJson(r));
         return arr;
     });
 
     server.register_method("recompileWithRemarks",
-        [&shadow, &store](const perf_lens::json& params) -> perf_lens::json
+        [&shadow, &remarkStore](const perf_lens::json& params) -> perf_lens::json
     {
         const auto file = params.value("file", std::string{});
         if (file.empty()) throw std::invalid_argument("file is required");
 
-        const auto result  = shadow.compile(file); // throws on failure
+        const auto result  = shadow.compile(file);
         const auto remarks = perf_lens::remarks::parseClangYaml(result.remarks_file, "shadow");
-        const int  count   = store.insertBulk(remarks);
+        const int  count   = remarkStore.insertBulk(remarks);
 
         return {
             {"remarksFile", result.remarks_file.string()},
@@ -118,9 +154,58 @@ int main(int argc, char* argv[]) {
     });
 
     server.register_method("getRemarkedFiles",
-        [&store](const perf_lens::json&) -> perf_lens::json
+        [&remarkStore](const perf_lens::json&) -> perf_lens::json
     {
-        const auto files = store.remarkedFiles();
+        const auto files = remarkStore.remarkedFiles();
+        perf_lens::json arr = perf_lens::json::array();
+        for (const auto& f : files) arr.push_back(f);
+        return arr;
+    });
+
+    // -----------------------------------------------------------------------
+    // Phase 3: static analysis
+    // -----------------------------------------------------------------------
+
+    server.register_method("analyseFile",
+        [&findingStore
+#ifdef PERF_LENS_HAVE_LLVM
+        , &astProject, &ruleEngine
+#endif
+        ](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto file     = params.value("file",    std::string{});
+        const auto build_id = params.value("buildId", std::string{"analysis"});
+        if (file.empty()) throw std::invalid_argument("file is required");
+
+#ifdef PERF_LENS_HAVE_LLVM
+        if (astProject && ruleEngine) {
+            findingStore.clearFile(file);
+            const auto findings = ruleEngine->analyseFile(
+                file, astProject->database(), build_id);
+            findingStore.insertBulk(findings);
+            return {{"count", static_cast<int>(findings.size())}, {"buildId", build_id}};
+        }
+#endif
+        return {{"count", 0}, {"buildId", build_id}, {"note", "LLVM not available"}};
+    });
+
+    server.register_method("getFindings",
+        [&findingStore](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto file = params.value("file", std::string{});
+        if (file.empty()) throw std::invalid_argument("file is required");
+        const int line = params.value("line", -1);
+
+        const auto findings = findingStore.getFindings(file, line);
+        perf_lens::json arr = perf_lens::json::array();
+        for (const auto& f : findings) arr.push_back(findingToJson(f));
+        return arr;
+    });
+
+    server.register_method("getAnalysedFiles",
+        [&findingStore](const perf_lens::json&) -> perf_lens::json
+    {
+        const auto files = findingStore.affectedFiles();
         perf_lens::json arr = perf_lens::json::array();
         for (const auto& f : files) arr.push_back(f);
         return arr;
@@ -128,10 +213,15 @@ int main(int argc, char* argv[]) {
 
     // -----------------------------------------------------------------------
 
+    perf_lens::json capabilities = perf_lens::json::array({"remarks"});
+#ifdef PERF_LENS_HAVE_LLVM
+    if (ruleEngine) capabilities.push_back("staticAnalysis");
+#endif
+
     server.notify("ready", {
-        {"version",      "0.2.0"},
+        {"version",      "0.3.0"},
         {"pid",          static_cast<int>(::getpid())},
-        {"capabilities", perf_lens::json::array({"remarks"})},
+        {"capabilities", capabilities},
     });
 
     log.info("Entering RPC loop");

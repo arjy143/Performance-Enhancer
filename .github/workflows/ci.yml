@@ -35,7 +35,7 @@ jobs:
         run: pnpm --filter perf-lens run test
 
   # -----------------------------------------------------------------------
-  # C++ sidecar: build + unit tests
+  # C++ sidecar: build + unit tests (with LLVM for static analysis rules)
   # -----------------------------------------------------------------------
   sidecar:
     name: "C++ — build & unit tests"
@@ -43,16 +43,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Install build tools + LLVM 19
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y cmake g++
+          sudo apt-get install -y cmake gcc g++ \
+            clang-19 llvm-19-dev libclang-cpp19-dev
 
-      - name: Configure
+      - name: Configure (with LLVM)
         run: |
           cmake -S sidecar -B sidecar/build \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
+            -DLLVM_DIR=/usr/lib/llvm-19/lib/cmake/llvm \
+            -DClang_DIR=/usr/lib/llvm-19/lib/cmake/clang \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
@@ -83,12 +86,12 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y cmake g++
+          sudo apt-get install -y cmake gcc g++
 
       - name: Install TS dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build sidecar
+      - name: Build sidecar (without LLVM for integration job speed)
         run: |
           cmake -S sidecar -B sidecar/build \
             -DCMAKE_C_COMPILER=gcc \

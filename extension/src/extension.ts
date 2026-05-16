@@ -9,6 +9,7 @@ import { loadProjectConfig } from './config/projectConfig';
 import type { PingResult } from './sidecar/protocol';
 import { RemarksDiagnosticProvider } from './diagnostics/provider';
 import { RemarksHoverProvider } from './diagnostics/hover';
+import { FindingsDiagnosticProvider } from './diagnostics/findingsProvider';
 import { RemarksTreeDataProvider } from './panels/remarksPanel';
 import { OptRecordsWatcher } from './build/watcher';
 
@@ -82,6 +83,10 @@ async function _initialiseAsync(
   const watcher = new OptRecordsWatcher(sidecar, diagnostics, treeProvider);
   ctx.subscriptions.push(watcher);
 
+  // Phase 3: static analysis findings provider
+  const findingsProvider = new FindingsDiagnosticProvider(sidecar);
+  ctx.subscriptions.push(findingsProvider);
+
   // Wire up the regenerate command now that we have a client
   ctx.subscriptions.push(
     vscode.commands.registerCommand('perfLens.regenerateRemarks', async () => {
@@ -114,6 +119,7 @@ async function _initialiseAsync(
     const doc = vscode.window.activeTextEditor.document;
     if (doc.languageId === 'cpp' || doc.languageId === 'c') {
       void diagnostics.refreshFile(doc.uri);
+      void findingsProvider.refreshFile(doc.uri);
     }
   }
 
