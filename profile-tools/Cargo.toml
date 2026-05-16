@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "perf-importer",
+  "pprof-importer",
+]
+resolver = "2"

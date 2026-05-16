@@ -36,6 +36,8 @@ export const window = {
   showWarningMessage: (..._args: unknown[]) => Promise.resolve(undefined),
   showErrorMessage:   (..._args: unknown[]) => Promise.resolve(undefined),
   showInformationMessage: (..._args: unknown[]) => Promise.resolve(undefined),
+  showOpenDialog: jest.fn(() => Promise.resolve(undefined)),
+  withProgress: jest.fn((_opts: unknown, task: () => Promise<unknown>) => task()),
   activeTextEditor: undefined as undefined,
   onDidChangeActiveTextEditor: jest.fn(() => ({ dispose: jest.fn() })),
   createStatusBarItem: (_alignment: number, _priority: number) => ({
@@ -47,6 +49,10 @@ export const window = {
     backgroundColor: undefined as unknown,
     name: '',
   }),
+  createTextEditorDecorationType: jest.fn(() => ({
+    dispose: jest.fn(),
+    key: 'mock-decoration',
+  })),
   registerTreeDataProvider: jest.fn(() => ({ dispose: jest.fn() })),
   createWebviewPanel: jest.fn(() => _mockWebviewPanel),
 };
@@ -75,6 +81,10 @@ export const env = {
 };
 
 export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
+
+export const ProgressLocation = { SourceControl: 1, Window: 10, Notification: 15 } as const;
+
+export const OverviewRulerLane = { Left: 1, Center: 2, Right: 4, Full: 7 } as const;
 
 export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 } as const;
 
@@ -115,10 +125,15 @@ export class Uri {
   }
 }
 
-export class EventEmitter {
-  event = jest.fn();
-  fire = jest.fn();
-  dispose = jest.fn();
+export class EventEmitter<T = void> {
+  private _listeners: Array<(e: T) => void> = [];
+  // `event` is a function that registers a listener and returns a disposable.
+  event = (listener: (e: T) => void): { dispose: () => void } => {
+    this._listeners.push(listener);
+    return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
+  };
+  fire = (data: T): void => { this._listeners.forEach(l => l(data)); };
+  dispose = (): void => { this._listeners = []; };
 }
 
 export class MarkdownString {

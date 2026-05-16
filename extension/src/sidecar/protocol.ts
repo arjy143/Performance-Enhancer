@@ -229,6 +229,46 @@ export interface DiffAsmParams {
   vectorWidthAfter?:  number;
 }
 
+// Profile Integration (Phase 6)
+
+export interface ProfileMetadata {
+  id:              string;
+  label:           string;
+  recordedAt:      number;   // Unix seconds
+  durationMs:      number;
+  binaryPath:      string;
+  binaryBuildId:   string;
+  cpuModel:        string;
+  samplingFreqHz:  number;
+  sourceProfiler:  string;   // "perf" | "pprof" | etc.
+  totalSamples:    number;
+}
+
+export interface LineHotness {
+  file:       string;
+  line:       number;
+  eventType:  string;
+  selfCount:  number;
+  totalCount: number;
+  fraction:   number;   // selfCount / totalCount ∈ [0, 1]
+}
+
+export interface FunctionHotness {
+  function:   string;
+  eventType:  string;
+  selfCount:  number;
+  totalCount: number;
+  fraction:   number;
+}
+
+export interface ImportProfileParams  { file: string; label?: string }
+export interface ImportProfileResult  { profileId: string; totalSamples: number }
+
+export interface GetLineHotnessParams  { profileId: string; file: string; line: number; event?: string }
+export interface GetFileHotnessParams  { profileId: string; file: string; event?: string }
+export interface GetTopFunctionsParams { profileId: string; n?: number; event?: string }
+export interface DeleteProfileParams   { profileId: string }
+
 export function isRpcResponse(msg: unknown): msg is RpcResponse {
   if (typeof msg !== 'object' || msg === null) return false;
   const m = msg as Record<string, unknown>;

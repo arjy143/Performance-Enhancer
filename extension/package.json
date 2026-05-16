@@ -2,7 +2,7 @@
   "name": "perf-lens",
   "displayName": "Perf Lens",
   "description": "C++ performance advisor: static analysis, compiler remarks, and profile-guided optimisation — all in VS Code.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "perf-lens",
   "private": true,
   "engines": {
@@ -80,6 +80,14 @@
       {
         "command": "perfLens.openLoopAnalyser",
         "title": "Perf Lens: Open Loop Analyser"
+      },
+      {
+        "command": "perfLens.showProfilePanel",
+        "title": "Perf Lens: Show Profile Panel"
+      },
+      {
+        "command": "perfLens.importProfile",
+        "title": "Perf Lens: Import Profile…"
       }
     ],
     "menus": {

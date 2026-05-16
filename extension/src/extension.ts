@@ -20,6 +20,9 @@ import { LoopAnalyserPanel } from './panels/loopAnalyserPanel';
 import { PerfLensCodeActionProvider } from './fixProvider/codeActionProvider';
 import { buildPatch } from './fixProvider/patchTemplates';
 import { verifyPatch } from './fixProvider/verifier';
+import { ProfileManager } from './profile/profileManager';
+import { GutterHeatmapProvider } from './profile/hotnessProvider';
+import { ProfilePanel } from './panels/profilePanel';
 import type { ProviderConfig } from './llm/types';
 import type { OptRemark, Finding, AsmDiff, CompileResult } from './sidecar/protocol';
 
@@ -96,6 +99,16 @@ async function _initialiseAsync(
   // Phase 3: static analysis findings
   const findingsProvider = new FindingsDiagnosticProvider(sidecar);
   ctx.subscriptions.push(findingsProvider);
+
+  // Phase 6: profile integration
+  const profileManager = new ProfileManager(sidecar);
+  ctx.subscriptions.push(profileManager);
+  await profileManager.refreshProfiles();
+
+  findingsProvider.setProfileManager(profileManager);
+
+  const hotnessProvider = new GutterHeatmapProvider(profileManager);
+  ctx.subscriptions.push(hotnessProvider);
 
   // Phase 4: LLM layer
   const llm = new LLMManager(ctx.globalStorageUri);
@@ -221,6 +234,29 @@ async function _initialiseAsync(
     vscode.commands.registerCommand('perfLens.showCacheLineLayout', (finding: Finding) => {
       const panel = CacheLinePanel.show(ctx);
       panel.render(finding);
+    }),
+
+    // Phase 6 commands
+    vscode.commands.registerCommand('perfLens.showProfilePanel', () => {
+      ProfilePanel.show(ctx, profileManager);
+    }),
+
+    vscode.commands.registerCommand('perfLens.importProfile', async () => {
+      const uris = await vscode.window.showOpenDialog({
+        title: 'Select profile file (perf.data, .pb.gz, .pprof)',
+        filters: { 'Profile files': ['data', 'pb', 'gz', 'pprof'], 'All files': ['*'] },
+        canSelectMany: false,
+      });
+      if (!uris || uris.length === 0) return;
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: importing profile…' },
+          () => profileManager.importProfile(uris[0].fsPath),
+        );
+        void vscode.window.showInformationMessage('Perf Lens: profile imported.');
+      } catch (err) {
+        void vscode.window.showErrorMessage(`Perf Lens: import failed — ${(err as Error).message}`);
+      }
     }),
 
     vscode.commands.registerCommand('perfLens.openLoopAnalyser', async (finding: Finding) => {

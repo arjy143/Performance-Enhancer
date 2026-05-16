@@ -7,6 +7,7 @@ import {
   FINDING_CATEGORY_LABELS,
   CONFIDENCE_LABELS,
 } from '../sidecar/protocol';
+import { type ProfileManager } from '../profile/profileManager';
 import { logger } from '../util/logger';
 
 const SOURCE = 'perf-lens-static';
@@ -46,6 +47,7 @@ function findingToMarkdown(f: Finding): vscode.MarkdownString {
 export class FindingsDiagnosticProvider implements vscode.Disposable {
   private readonly _collection: vscode.DiagnosticCollection;
   private readonly _subs: vscode.Disposable[] = [];
+  private _profileManager: ProfileManager | undefined;
 
   constructor(private readonly _client: SidecarClient) {
     this._collection = vscode.languages.createDiagnosticCollection(SOURCE);
@@ -54,6 +56,17 @@ export class FindingsDiagnosticProvider implements vscode.Disposable {
         if (doc.languageId === 'cpp' || doc.languageId === 'c') {
           void this.analyseAndRefresh(doc.uri);
         }
+      }),
+    );
+  }
+
+  setProfileManager(pm: ProfileManager): void {
+    this._profileManager = pm;
+    // Re-decorate when profile changes
+    this._subs.push(
+      pm.onProfileChanged(() => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) void this.refreshFile(editor.document.uri);
       }),
     );
   }
@@ -79,13 +92,37 @@ export class FindingsDiagnosticProvider implements vscode.Disposable {
       return;
     }
 
+    // Optionally annotate with hotness from active profile
+    let hotnessMap = new Map<number, number>();  // line → fraction
+    if (this._profileManager?.hasActiveProfile) {
+      const rows = await this._profileManager.getFileHotness(file).catch(() => []);
+      for (const h of rows) hotnessMap.set(h.line, h.fraction);
+    }
+
     const diags: vscode.Diagnostic[] = findings.map(f => {
       const line  = Math.max(0, f.line - 1);
       const range = new vscode.Range(line, f.column, line, f.column + 1);
-      const diag  = new vscode.Diagnostic(range, f.message, findingSeverity(f));
+      const hot   = hotnessMap.get(f.line);
+
+      // Upgrade severity for hot findings; downgrade for cold ones
+      let severity = findingSeverity(f);
+      if (hot !== undefined) {
+        if (hot >= 0.05) severity = vscode.DiagnosticSeverity.Warning;   // always warn if hot
+        else if (hot < 0.005) severity = vscode.DiagnosticSeverity.Hint; // demote if cold
+      }
+
+      const hotLabel = hot !== undefined ? ` [${(hot * 100).toFixed(1)}% cycles]` : '';
+      const diag  = new vscode.Diagnostic(range, f.message + hotLabel, severity);
       diag.source  = SOURCE;
       diag.code    = f.ruleId;
       return diag;
+    });
+
+    // Sort: hot findings first (those with hotness annotation, descending)
+    diags.sort((a, b) => {
+      const hotA = hotnessMap.get((a.range.start.line + 1)) ?? -1;
+      const hotB = hotnessMap.get((b.range.start.line + 1)) ?? -1;
+      return hotB - hotA;
     });
 
     this._collection.set(uri, diags);
