@@ -18,7 +18,15 @@
 #include "rules/packs/memory_layout/padding_detected.hpp"
 #include "rules/packs/constexpr/promotion_variable.hpp"
 #include "rules/packs/vec/aliasing.hpp"
+#include "rules/packs/vec/complex_cf.hpp"
+#include "rules/packs/vec/reduction_fp.hpp"
 #include "rules/packs/concurrency/mutex_where_atomic.hpp"
+#include "rules/packs/hotpath/allocation_in_loop.hpp"
+#include "rules/packs/stl_hygiene/nodiscard_return.hpp"
+#include "rules/packs/ub/signed_loop_bound.hpp"
+#include "rules/packs/memory_layout/cache_line_straddle.hpp"
+#include "rules/packs/memory_layout/aos_to_soa.hpp"
+#include "rules/packs/constexpr/promotion_function.hpp"
 
 #include <clang/Tooling/Tooling.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
@@ -449,6 +457,292 @@ struct Plain {
     int y;
 };
 )";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// AllocationInLoopRule
+// ---------------------------------------------------------------------------
+
+TEST(AllocationInLoop, FiresOnNewInForLoop) {
+    AllocationInLoopRule rule;
+    const char* src = R"(
+void f(int n) {
+    for (int i = 0; i < n; ++i) {
+        int* p = new int(i);
+        (void)p;
+    }
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.hotpath.allocation-in-loop");
+    EXPECT_EQ(findings[0].category, FindingCategory::HotPath);
+}
+
+TEST(AllocationInLoop, FiresOnMakeUniqueInLoop) {
+    AllocationInLoopRule rule;
+    const char* src = R"(
+#include <memory>
+void f(int n) {
+    for (int i = 0; i < n; ++i) {
+        auto p = std::make_unique<int>(i);
+        (void)p;
+    }
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.hotpath.allocation-in-loop");
+}
+
+TEST(AllocationInLoop, SilentOutsideLoop) {
+    AllocationInLoopRule rule;
+    const char* src = R"(
+#include <memory>
+void f() {
+    auto p = std::make_unique<int>(42);
+    (void)p;
+}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// NodiscardReturnRule
+// ---------------------------------------------------------------------------
+
+TEST(NodiscardReturn, FiresOnErrorCodeWithoutNodiscard) {
+    NodiscardReturnRule rule;
+    const char* src = R"(
+#include <system_error>
+std::error_code doThing() { return {}; }
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.nodiscard.error-return");
+    EXPECT_EQ(findings[0].category, FindingCategory::FunctionAttrib);
+}
+
+TEST(NodiscardReturn, SilentWhenNodiscardPresent) {
+    NodiscardReturnRule rule;
+    const char* src = R"(
+#include <system_error>
+[[nodiscard]] std::error_code doThing() { return {}; }
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+TEST(NodiscardReturn, SilentForVoidReturn) {
+    NodiscardReturnRule rule;
+    const char* src = R"(
+void doThing() {}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// SignedLoopBoundRule
+// ---------------------------------------------------------------------------
+
+TEST(SignedLoopBound, FiresOnSignedVsUnsigned) {
+    SignedLoopBoundRule rule;
+    const char* src = R"(
+#include <vector>
+void f(const std::vector<int>& v) {
+    for (int i = 0; i < (int)v.size(); ++i) { (void)v[i]; }
+}
+)";
+    // The cast to int makes both sides signed — should NOT fire.
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+TEST(SignedLoopBound, FiresWithoutCast) {
+    SignedLoopBoundRule rule;
+    const char* src = R"(
+#include <cstddef>
+void f(std::size_t n) {
+    for (int i = 0; i < (std::size_t)n; ++i) { (void)i; }
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.ub.signed-loop-bound");
+    EXPECT_EQ(findings[0].confidence, ConfidenceLevel::High);
+}
+
+TEST(SignedLoopBound, SilentForSignedBothSides) {
+    SignedLoopBoundRule rule;
+    const char* src = R"(
+void f(int n) {
+    for (int i = 0; i < n; ++i) { (void)i; }
+}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// ComplexCfRule
+// ---------------------------------------------------------------------------
+
+TEST(ComplexCf, FiresOnReturnInsideLoop) {
+    ComplexCfRule rule;
+    const char* src = R"(
+#include <vector>
+int findFirst(const std::vector<int>& v, int target) {
+    for (int i = 0; i < (int)v.size(); ++i) {
+        if (v[i] == target) return i;
+    }
+    return -1;
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.vec.complex-cf");
+    EXPECT_EQ(findings[0].confidence, ConfidenceLevel::Low);
+}
+
+TEST(ComplexCf, SilentForLoopWithNoEarlyExit) {
+    ComplexCfRule rule;
+    const char* src = R"(
+#include <vector>
+float sum(const std::vector<float>& v) {
+    float acc = 0.f;
+    for (float x : v) acc += x;
+    return acc;
+}
+)";
+    // The return here is outside the loop — should not fire.
+    const auto findings = runRule(rule, src);
+    EXPECT_TRUE(findings.empty());
+}
+
+// ---------------------------------------------------------------------------
+// ReductionFpRule
+// ---------------------------------------------------------------------------
+
+TEST(ReductionFp, FiresOnFloatAccumulation) {
+    ReductionFpRule rule;
+    const char* src = R"(
+#include <vector>
+float sum(const std::vector<float>& v) {
+    float acc = 0.f;
+    for (float x : v) acc += x;
+    return acc;
+}
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.vec.reduction-fp");
+    EXPECT_EQ(findings[0].category, FindingCategory::HotPath);
+}
+
+TEST(ReductionFp, SilentForIntegerAccumulation) {
+    ReductionFpRule rule;
+    const char* src = R"(
+#include <vector>
+int sum(const std::vector<int>& v) {
+    int acc = 0;
+    for (int x : v) acc += x;
+    return acc;
+}
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// CacheLineStraddleRule
+// ---------------------------------------------------------------------------
+
+TEST(CacheLineStraddle, FiresOnStraddlingField) {
+    CacheLineStraddleRule rule;
+    // char arrays have alignment 1 so no padding is inserted between fields.
+    // pad[60] occupies bytes 0–59. bigfield[8] occupies bytes 60–67.
+    // 60/64=0 (line 0) but 67/64=1 (line 1) → straddles the boundary.
+    const char* src = R"(
+struct Straddler {
+    char pad[60];       // bytes 0–59
+    char bigfield[8];   // bytes 60–67: straddles 64-byte cache line boundary
+};
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.padding.cache-line-straddle");
+    EXPECT_EQ(findings[0].category, FindingCategory::MemoryLayout);
+}
+
+TEST(CacheLineStraddle, SilentWhenAligned) {
+    CacheLineStraddleRule rule;
+    const char* src = R"(
+struct Aligned {
+    double a;  // offset 0, size 8 — within line 0
+    double b;  // offset 8, size 8 — within line 0
+    double c;  // offset 16, size 8 — within line 0
+};
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// PromotionFunctionRule
+// ---------------------------------------------------------------------------
+
+TEST(PromotionFunction, FiresOnSimpleSingleReturn) {
+    PromotionFunctionRule rule;
+    const char* src = R"(
+int square(int x) { return x * x; }
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.constexpr.promotion-function");
+    EXPECT_EQ(findings[0].confidence, ConfidenceLevel::Low);
+}
+
+TEST(PromotionFunction, SilentWhenAlreadyConstexpr) {
+    PromotionFunctionRule rule;
+    const char* src = R"(
+constexpr int square(int x) { return x * x; }
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+TEST(PromotionFunction, SilentWhenBodyHasCallExpr) {
+    PromotionFunctionRule rule;
+    const char* src = R"(
+int helper(int x);
+int compute(int x) { return helper(x) + 1; }
+)";
+    EXPECT_TRUE(runRule(rule, src).empty());
+}
+
+// ---------------------------------------------------------------------------
+// AosToSoaRule
+// ---------------------------------------------------------------------------
+
+TEST(AosToSoa, FiresOnLargeStructVector) {
+    AosToSoaRule rule;
+    const char* src = R"(
+#include <vector>
+struct Particle {
+    float x, y, z;
+    float vx, vy, vz;
+};
+std::vector<Particle> particles;
+)";
+    const auto findings = runRule(rule, src);
+    ASSERT_GE(findings.size(), 1u);
+    EXPECT_EQ(findings[0].rule_id, "perf-lens.memory_layout.aos-to-soa");
+    EXPECT_NE(findings[0].message.find("Particle"), std::string::npos);
+}
+
+TEST(AosToSoa, SilentForSmallStruct) {
+    AosToSoaRule rule;
+    const char* src = R"(
+#include <vector>
+struct Point { float x, y; };
+std::vector<Point> pts;
+)";
+    // Only 2 fields — below kMinFields threshold.
     EXPECT_TRUE(runRule(rule, src).empty());
 }
 

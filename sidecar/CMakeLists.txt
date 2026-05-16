@@ -109,7 +109,15 @@ if(PERF_LENS_HAVE_LLVM)
         src/rules/packs/memory_layout/padding_detected.cpp
         src/rules/packs/constexpr/promotion_variable.cpp
         src/rules/packs/vec/aliasing.cpp
+        src/rules/packs/vec/complex_cf.cpp
+        src/rules/packs/vec/reduction_fp.cpp
         src/rules/packs/concurrency/mutex_where_atomic.cpp
+        src/rules/packs/hotpath/allocation_in_loop.cpp
+        src/rules/packs/stl_hygiene/nodiscard_return.cpp
+        src/rules/packs/ub/signed_loop_bound.cpp
+        src/rules/packs/memory_layout/cache_line_straddle.cpp
+        src/rules/packs/memory_layout/aos_to_soa.cpp
+        src/rules/packs/constexpr/promotion_function.cpp
     )
     target_compile_definitions(perf-lens-sidecar-lib PUBLIC PERF_LENS_HAVE_LLVM)
     target_link_libraries(perf-lens-sidecar-lib PUBLIC
@@ -131,7 +139,9 @@ if(PERF_LENS_HAVE_LLVM)
 endif()
 
 target_compile_options(perf-lens-sidecar-lib PRIVATE
-  $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
+  # -Wno-error=nonnull: GCC fires spurious -Wnonnull on LLVM 19 inlined templates
+  # (ExternalASTSource.h:400) even when headers are marked SYSTEM. Not our bug.
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror -Wno-error=nonnull>
 )
 
 # ---------------------------------------------------------------------------
@@ -140,7 +150,7 @@ target_compile_options(perf-lens-sidecar-lib PRIVATE
 add_executable(perf-lens-sidecar src/main.cpp)
 target_link_libraries(perf-lens-sidecar PRIVATE perf-lens-sidecar-lib)
 target_compile_options(perf-lens-sidecar PRIVATE
-  $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror -Wno-error=nonnull>
 )
 
 # ---------------------------------------------------------------------------

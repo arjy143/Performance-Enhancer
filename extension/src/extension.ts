@@ -134,6 +134,35 @@ async function _initialiseAsync(
 
   // Commands
   ctx.subscriptions.push(
+    vscode.commands.registerCommand('perfLens.analyseFile', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        void vscode.window.showWarningMessage('Perf Lens: open a C/C++ file first.');
+        return;
+      }
+      const file = editor.document.uri.fsPath;
+      statusBar.setStarting();
+      try {
+        const result = await sidecar.request<{ count: number; buildId: string }>(
+          'analyseFile', { file },
+        );
+        await findingsProvider.refreshFile(editor.document.uri);
+        statusBar.setReady(result.count);
+        if (result.count === 0) {
+          void vscode.window.showInformationMessage('Perf Lens: no findings in this file.');
+        }
+      } catch (err) {
+        const msg = (err as Error).message;
+        logger.error(`Analyse file failed: ${msg}`);
+        void vscode.window.showErrorMessage(`Perf Lens: analysis failed — ${msg}`);
+        statusBar.setReady();
+      }
+    }),
+
+    vscode.commands.registerCommand('perfLens.showPerfPanel', () => {
+      ProfilePanel.show(ctx, profileManager);
+    }),
+
     vscode.commands.registerCommand('perfLens.regenerateRemarks', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {

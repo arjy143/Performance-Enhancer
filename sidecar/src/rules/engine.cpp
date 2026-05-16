@@ -14,7 +14,15 @@
 #include "packs/memory_layout/padding_detected.hpp"
 #include "packs/constexpr/promotion_variable.hpp"
 #include "packs/vec/aliasing.hpp"
+#include "packs/vec/complex_cf.hpp"
+#include "packs/vec/reduction_fp.hpp"
 #include "packs/concurrency/mutex_where_atomic.hpp"
+#include "packs/hotpath/allocation_in_loop.hpp"
+#include "packs/stl_hygiene/nodiscard_return.hpp"
+#include "packs/ub/signed_loop_bound.hpp"
+#include "packs/memory_layout/cache_line_straddle.hpp"
+#include "packs/memory_layout/aos_to_soa.hpp"
+#include "packs/constexpr/promotion_function.hpp"
 
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Tooling/JSONCompilationDatabase.h>
@@ -31,7 +39,15 @@ RuleEngine::RuleEngine() {
     _rules.push_back(std::make_unique<PaddingDetectedRule>());
     _rules.push_back(std::make_unique<PromotionVariableRule>());
     _rules.push_back(std::make_unique<VecAliasingRule>());
+    _rules.push_back(std::make_unique<ComplexCfRule>());
+    _rules.push_back(std::make_unique<ReductionFpRule>());
     _rules.push_back(std::make_unique<MutexWhereAtomicRule>());
+    _rules.push_back(std::make_unique<AllocationInLoopRule>());
+    _rules.push_back(std::make_unique<NodiscardReturnRule>());
+    _rules.push_back(std::make_unique<SignedLoopBoundRule>());
+    _rules.push_back(std::make_unique<CacheLineStraddleRule>());
+    _rules.push_back(std::make_unique<AosToSoaRule>());
+    _rules.push_back(std::make_unique<PromotionFunctionRule>());
 }
 
 std::vector<Finding> RuleEngine::analyseFile(

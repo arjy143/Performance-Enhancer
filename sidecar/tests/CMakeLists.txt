@@ -21,5 +21,9 @@ target_link_libraries(perf-lens-sidecar-tests PRIVATE
   GTest::gtest_main
 )
 
+target_compile_options(perf-lens-sidecar-tests PRIVATE
+  $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror -Wno-error=nonnull>
+)
+
 include(GoogleTest)
 gtest_discover_tests(perf-lens-sidecar-tests)
