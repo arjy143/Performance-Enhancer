@@ -21,12 +21,14 @@ function findingSeverity(f: Finding): vscode.DiagnosticSeverity {
 function findingToMarkdown(f: Finding): vscode.MarkdownString {
   const cat  = FINDING_CATEGORY_LABELS[f.category] ?? 'Other';
   const conf = CONFIDENCE_LABELS[f.confidence] ?? 'unknown';
+  const args = encodeURIComponent(JSON.stringify(f));
   const md = new vscode.MarkdownString(
     `**$(lightbulb) ${f.title}**\n\n${f.message}\n\n` +
     `| | |\n|---|---|\n` +
     `| Category | ${cat} |\n` +
     `| Confidence | ${conf} |\n` +
-    `| Rule | \`${f.ruleId}\` |`,
+    `| Rule | \`${f.ruleId}\` |\n\n` +
+    `[$(sparkle) Explain with AI](command:perfLens.explainFinding?${args})`,
     true,
   );
   md.isTrusted = true;

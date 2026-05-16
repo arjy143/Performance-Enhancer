@@ -10,9 +10,10 @@ const TYPE_LABEL: Record<RemarkType, string> = {
 };
 
 function remarkToMarkdown(r: OptRemark): string {
-  const type = TYPE_LABEL[r.type] ?? 'Unknown';
-  const cat  = CATEGORY_LABELS[r.category] ?? 'Other';
+  const type  = TYPE_LABEL[r.type] ?? 'Unknown';
+  const cat   = CATEGORY_LABELS[r.category] ?? 'Other';
   const stale = r.isStale ? ' _(stale)_' : '';
+  const args  = encodeURIComponent(JSON.stringify(r));
   return `**$(perf-lens-icon) Perf Lens** · ${type}${stale}
 
 ${r.message}
@@ -22,7 +23,9 @@ ${r.message}
 | Category | ${cat} |
 | Pass | \`${r.pass}\` |
 | Function | \`${r.function}\` |
-| Build | \`${r.buildId}\` |`;
+| Build | \`${r.buildId}\` |
+
+[$(sparkle) Translate with AI](command:perfLens.translateRemark?${args})`;
 }
 
 export class RemarksHoverProvider implements vscode.HoverProvider, vscode.Disposable {

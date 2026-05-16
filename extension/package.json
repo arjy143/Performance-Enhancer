@@ -2,7 +2,7 @@
   "name": "perf-lens",
   "displayName": "Perf Lens",
   "description": "C++ performance advisor: static analysis, compiler remarks, and profile-guided optimisation — all in VS Code.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "perf-lens",
   "private": true,
   "engines": {
@@ -52,6 +52,18 @@
       {
         "command": "perfLens.goToRemark",
         "title": "Perf Lens: Go to Remark"
+      },
+      {
+        "command": "perfLens.translateRemark",
+        "title": "Perf Lens: Translate Remark with AI"
+      },
+      {
+        "command": "perfLens.explainFinding",
+        "title": "Perf Lens: Explain Finding with AI"
+      },
+      {
+        "command": "perfLens.clearLLMCache",
+        "title": "Perf Lens: Clear LLM Cache"
       }
     ],
     "menus": {
@@ -86,6 +98,37 @@
           "type": "string",
           "default": "",
           "description": "Primary LLM provider in the form 'provider:model' (e.g. 'ollama:qwen2.5-coder:7b')."
+        },
+        "perfLens.llm.providers": {
+          "type": "array",
+          "default": [],
+          "description": "List of LLM provider configurations.",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "model"],
+            "properties": {
+              "id":      { "type": "string", "description": "Unique identifier for this provider." },
+              "type":    { "type": "string", "enum": ["ollama", "openai-compat", "anthropic", "openai"], "description": "Provider type." },
+              "model":   { "type": "string", "description": "Model name." },
+              "baseUrl": { "type": "string", "description": "Base URL (for ollama and openai-compat)." },
+              "apiKey":  { "type": "string", "description": "API key (for anthropic, openai, openai-compat)." },
+              "isLocal": { "type": "boolean", "description": "Override local flag (for openai-compat pointing at a local server)." }
+            }
+          }
+        },
+        "perfLens.llm.allowRemote": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow using remote (non-local) LLM providers. When false, only Ollama and other local providers are used."
+        },
+        "perfLens.llm.budgetUSD": {
+          "type": "number",
+          "description": "Monthly spend limit in USD for remote LLM providers. The router will not send calls that would exceed this budget."
+        },
+        "perfLens.llm.warnAtPercent": {
+          "type": "number",
+          "default": 80,
+          "description": "Show a warning in the status bar when this percentage of the budget has been consumed."
         },
         "perfLens.compiler.path": {
           "type": "string",

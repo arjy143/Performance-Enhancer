@@ -1,0 +1,58 @@
+import type { TaskDefinition, TaskKind } from './types';
+
+export const taskDefinitions: Record<TaskKind, TaskDefinition> = {
+  translate_opt_remark: {
+    kind: 'translate_opt_remark',
+    minimumModelClass: 'small',
+    expectedOutputTokens: 200,
+    responseFormat: 'json',
+    defaultTemperature: 0.2,
+    cacheable: true,
+    costSensitivity: 'high',
+  },
+  explain_finding: {
+    kind: 'explain_finding',
+    minimumModelClass: 'small',
+    expectedOutputTokens: 300,
+    responseFormat: 'text',
+    defaultTemperature: 0.3,
+    cacheable: true,
+    costSensitivity: 'medium',
+  },
+  explain_hotness: {
+    kind: 'explain_hotness',
+    minimumModelClass: 'small',
+    expectedOutputTokens: 200,
+    responseFormat: 'text',
+    defaultTemperature: 0.3,
+    cacheable: true,
+    costSensitivity: 'medium',
+  },
+  classify_opt_remark_cause: {
+    kind: 'classify_opt_remark_cause',
+    minimumModelClass: 'small',
+    expectedOutputTokens: 50,
+    responseFormat: 'json',
+    defaultTemperature: 0.1,
+    cacheable: true,
+    costSensitivity: 'high',
+  },
+  synthesise_top_findings: {
+    kind: 'synthesise_top_findings',
+    minimumModelClass: 'mid',
+    expectedOutputTokens: 400,
+    responseFormat: 'json',
+    defaultTemperature: 0.3,
+    cacheable: true,
+    costSensitivity: 'medium',
+  },
+  suggest_novel_refactor: {
+    kind: 'suggest_novel_refactor',
+    minimumModelClass: 'frontier',
+    expectedOutputTokens: 600,
+    responseFormat: 'text',
+    defaultTemperature: 0.5,
+    cacheable: false,
+    costSensitivity: 'low',
+  },
+};

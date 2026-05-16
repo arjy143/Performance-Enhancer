@@ -12,6 +12,20 @@ export const languages = {
   registerHoverProvider: jest.fn(() => ({ dispose: jest.fn() })),
 };
 
+const _mockWebview = {
+  postMessage: jest.fn(() => Promise.resolve(true)),
+  html: '',
+  onDidReceiveMessage: jest.fn(() => ({ dispose: jest.fn() })),
+};
+
+const _mockWebviewPanel = {
+  webview: _mockWebview,
+  title: '',
+  reveal: jest.fn(),
+  onDidDispose: jest.fn((_cb: () => void) => ({ dispose: jest.fn() })),
+  dispose: jest.fn(),
+};
+
 export const window = {
   createOutputChannel: (_name: string) => ({
     appendLine: (_line: string) => { /* noop */ },
@@ -33,10 +47,15 @@ export const window = {
     name: '',
   }),
   registerTreeDataProvider: jest.fn(() => ({ dispose: jest.fn() })),
+  createWebviewPanel: jest.fn(() => _mockWebviewPanel),
 };
 
 export const workspace = {
   workspaceFolders: undefined as undefined,
+  onDidSaveTextDocument: jest.fn(() => ({ dispose: jest.fn() })),
+  getConfiguration: jest.fn(() => ({
+    get: jest.fn((_key: string, defaultVal?: unknown) => defaultVal),
+  })),
   createFileSystemWatcher: jest.fn(() => ({
     onDidCreate: jest.fn(() => ({ dispose: jest.fn() })),
     onDidChange: jest.fn(() => ({ dispose: jest.fn() })),
@@ -123,3 +142,5 @@ export class TreeItem {
 }
 
 export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 } as const;
+
+export const ViewColumn = { One: 1, Two: 2, Three: 3, Beside: -2, Active: -1 } as const;
