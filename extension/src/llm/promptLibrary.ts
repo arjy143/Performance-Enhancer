@@ -1,4 +1,4 @@
-import type { RemarkContext, FindingContext, CompletionRequest } from './types';
+import type { RemarkContext, FindingContext, HotnessContext, SynthesisContext, CompletionRequest } from './types';
 
 // Bump these when prompts change — cache keys include the version.
 export const PROMPT_VERSIONS = {
@@ -89,20 +89,99 @@ Explain this finding.`;
 }
 
 // ---------------------------------------------------------------------------
-// explain_hotness  (stub — profile data arrives in Phase 6)
+// explain_hotness
 // ---------------------------------------------------------------------------
 
-const EXPLAIN_HOTNESS_SYSTEM = `You are a C++ performance expert. Explain why a function or code region is hot based on profile data.`;
+const EXPLAIN_HOTNESS_SYSTEM = `You are a C++ performance expert. Given a profile showing hot functions and static analysis findings, explain what is happening and why. Be specific: refer to the function names and finding types provided. Do not invent measurements not in the data.
 
-export function buildExplainHotnessRequest(funcName: string, hotnessPct: number): CompletionRequest {
+Structure your response as three paragraphs:
+1. Where the CPU time is going (top functions and why they dominate).
+2. What the static findings indicate about the root cause.
+3. Concrete next steps, ordered by expected impact.
+
+Plain prose only. No markdown headers. No bullet lists.`;
+
+export function buildExplainHotnessRequest(ctx: HotnessContext): CompletionRequest {
+  const topStr = ctx.topFunctions
+    .slice(0, 5)
+    .map((f, i) => `  ${i + 1}. ${f.function}: ${f.pct.toFixed(1)}% of ${f.eventType}`)
+    .join('\n');
+
+  const findingsStr = ctx.activeFindings.length > 0
+    ? '\nSTATIC FINDINGS ON HOT CODE:\n' + ctx.activeFindings
+        .slice(0, 8)
+        .map(f => `  - [${f.ruleId}] ${f.title} at ${f.file.split('/').pop()}:${f.line}`)
+        .join('\n')
+    : '';
+
+  const user = `PROFILE: "${ctx.profileLabel}" (${ctx.totalSamples.toLocaleString()} samples)
+
+TOP FUNCTIONS BY CPU TIME:
+${topStr}
+${findingsStr}
+
+Explain what is happening in this profile and what the developer should investigate first.`;
+
   return {
     system: EXPLAIN_HOTNESS_SYSTEM,
-    messages: [{
-      role: 'user',
-      content: `Function "${funcName}" consumed ${hotnessPct.toFixed(1)}% of total runtime. Explain common reasons and suggest investigation steps.`,
-    }],
+    messages: [{ role: 'user', content: user }],
     temperature: 0.3,
-    maxTokens: 300,
+    maxTokens: 500,
     responseFormat: 'text',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// synthesise_top_findings — rich prompt combining profile + static analysis
+// ---------------------------------------------------------------------------
+
+const SYNTHESISE_TOP_FINDINGS_SYSTEM = `You are a C++ performance expert tasked with writing an actionable performance report. You receive profile data (where time is spent) and static analysis findings (what might be causing it). Synthesise them into concrete recommendations.
+
+Respond with a JSON object:
+{
+  "recommendations": [
+    {
+      "rank": 1,
+      "function": "<function name>",
+      "expectedImpact": "<1-sentence impact estimate>",
+      "action": "<specific thing to do>",
+      "evidence": "<why — profile data + finding>"
+    }
+  ],
+  "summary": "<2-3 sentence overall assessment>"
+}
+
+Limit to top 3 recommendations. Do not invent data. Only reference functions and findings you were given.`;
+
+export function buildSynthesiseTopFindingsRequest(ctx: SynthesisContext): CompletionRequest {
+  const topStr = ctx.topFunctions
+    .slice(0, 8)
+    .map((f, i) => `  ${i + 1}. ${f.function}: ${f.pct.toFixed(1)}%`)
+    .join('\n');
+
+  const findingsStr = ctx.activeFindings.length > 0
+    ? ctx.activeFindings.slice(0, 10)
+        .map(f => `  - [${f.ruleId}] ${f.title} at ${f.file.split('/').pop()}:${f.line}`)
+        .join('\n')
+    : '  (none)';
+
+  const cpuLine = ctx.cpuModel ? `\nCPU: ${ctx.cpuModel}` : '';
+
+  const user = `PROFILE: "${ctx.profileLabel}" (${ctx.totalSamples.toLocaleString()} samples)${cpuLine}
+
+TOP FUNCTIONS:
+${topStr}
+
+STATIC FINDINGS:
+${findingsStr}
+
+Synthesise the top 3 most impactful recommendations.`;
+
+  return {
+    system: SYNTHESISE_TOP_FINDINGS_SYSTEM,
+    messages: [{ role: 'user', content: user }],
+    temperature: 0.2,
+    maxTokens: 600,
+    responseFormat: 'json',
   };
 }

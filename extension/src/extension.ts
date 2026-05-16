@@ -23,6 +23,8 @@ import { verifyPatch } from './fixProvider/verifier';
 import { ProfileManager } from './profile/profileManager';
 import { GutterHeatmapProvider } from './profile/hotnessProvider';
 import { ProfilePanel } from './panels/profilePanel';
+import { RecordProfilePanel } from './panels/recordProfilePanel';
+import { ProfileComparePanel } from './panels/profileComparePanel';
 import type { ProviderConfig } from './llm/types';
 import type { OptRemark, Finding, AsmDiff, CompileResult } from './sidecar/protocol';
 
@@ -109,6 +111,15 @@ async function _initialiseAsync(
 
   const hotnessProvider = new GutterHeatmapProvider(profileManager);
   ctx.subscriptions.push(hotnessProvider);
+
+  // Staleness check on save
+  ctx.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(doc => {
+      if (doc.languageId === 'cpp' || doc.languageId === 'c') {
+        void profileManager.checkStaleness(doc.uri);
+      }
+    }),
+  );
 
   // Phase 4: LLM layer
   const llm = new LLMManager(ctx.globalStorageUri);
@@ -239,6 +250,53 @@ async function _initialiseAsync(
     // Phase 6 commands
     vscode.commands.registerCommand('perfLens.showProfilePanel', () => {
       ProfilePanel.show(ctx, profileManager);
+    }),
+
+    vscode.commands.registerCommand('perfLens.recordProfile', () => {
+      RecordProfilePanel.show(ctx, profileManager);
+    }),
+
+    vscode.commands.registerCommand('perfLens.compareProfiles', () => {
+      ProfileComparePanel.show(ctx, profileManager);
+    }),
+
+    vscode.commands.registerCommand('perfLens.synthesiseHotness', async () => {
+      if (!llm.hasProviders) {
+        void vscode.window.showInformationMessage(
+          'Perf Lens: configure an LLM provider in settings to use AI synthesis.',
+        );
+        return;
+      }
+      if (!profileManager.hasActiveProfile) {
+        void vscode.window.showWarningMessage('Perf Lens: load a profile first.');
+        return;
+      }
+      const topFunctions = await profileManager.getTopFunctions(8);
+      if (topFunctions.length === 0) {
+        void vscode.window.showWarningMessage('Perf Lens: no hotness data in active profile.');
+        return;
+      }
+      const activeProfile = profileManager.profiles.find(
+        p => p.id === profileManager.activeProfileId,
+      );
+      const ctrl = new AbortController();
+      const panel = ExplanationPanel.show(ctx, 'Perf Lens: Performance Synthesis');
+      const result = await llm.synthesiseTopFindings({
+        topFunctions: topFunctions.map(f => ({
+          function: f.function,
+          pct: f.fraction * 100,
+          eventType: f.eventType,
+        })),
+        profileLabel:   activeProfile?.label ?? 'profile',
+        totalSamples:   activeProfile?.totalSamples ?? 0,
+        activeFindings: [],
+        cpuModel:       activeProfile?.cpuModel,
+      }, ctrl.signal);
+      if (result.type === 'silent_degrade') {
+        panel.showDegrade(result.reason ?? 'No provider available.');
+      } else if (result.stream) {
+        await panel.streamResult(result.stream, ctrl.signal);
+      }
     }),
 
     vscode.commands.registerCommand('perfLens.importProfile', async () => {

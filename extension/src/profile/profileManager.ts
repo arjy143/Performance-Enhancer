@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { type SidecarClient } from '../sidecar/client';
 import type {
   ProfileMetadata,
@@ -109,7 +111,61 @@ export class ProfileManager implements vscode.Disposable {
     }
   }
 
+  // ── Staleness detection ────────────────────────────────────────────────
+
+  // Call after a document save. If the saved file was part of the active
+  // profile's snapshot, computes its current hash and warns if it changed.
+  async checkStaleness(uri: vscode.Uri): Promise<void> {
+    if (!this._activeProfileId) return;
+    const file = uri.fsPath;
+    try {
+      const hashes = await this._client.request<Record<string, string>>(
+        'getSourceHashes', { profileId: this._activeProfileId },
+      );
+      if (!(file in hashes)) return;
+      const current = hashFile(file);
+      if (current && current !== hashes[file]) {
+        const choice = await vscode.window.showInformationMessage(
+          `Perf Lens: source file "${file.split('/').pop()}" has changed since this profile was recorded. Hotness data may be stale.`,
+          'Re-profile', 'Show Profile Panel', 'Dismiss',
+        );
+        if (choice === 'Re-profile') {
+          await vscode.commands.executeCommand('perfLens.recordProfile');
+        } else if (choice === 'Show Profile Panel') {
+          await vscode.commands.executeCommand('perfLens.showProfilePanel');
+        }
+      }
+    } catch {
+      // Silently ignore — staleness check is best-effort
+    }
+  }
+
+  // Store current file hashes for the active profile (call after import).
+  async snapshotSourceHashes(files: string[]): Promise<void> {
+    if (!this._activeProfileId) return;
+    const hashes: Record<string, string> = {};
+    for (const f of files) {
+      const h = hashFile(f);
+      if (h) hashes[f] = h;
+    }
+    try {
+      await this._client.request<unknown>('storeSourceHashes', {
+        profileId: this._activeProfileId,
+        hashes,
+      });
+    } catch { /* best-effort */ }
+  }
+
   dispose(): void {
     this._onProfileChanged.dispose();
+  }
+}
+
+function hashFile(filePath: string): string | null {
+  try {
+    const data = fs.readFileSync(filePath);
+    return crypto.createHash('sha256').update(data).digest('hex');
+  } catch {
+    return null;
   }
 }

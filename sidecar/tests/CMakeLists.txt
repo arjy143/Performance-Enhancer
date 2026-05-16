@@ -13,6 +13,7 @@ add_executable(perf-lens-sidecar-tests
   rules_test.cpp
   godbolt_test.cpp
   profile_store_test.cpp
+  profile_rules_test.cpp
 )
 
 target_link_libraries(perf-lens-sidecar-tests PRIVATE

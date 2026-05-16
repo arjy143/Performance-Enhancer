@@ -12,8 +12,10 @@ import { AnthropicProvider } from './providers/anthropic';
 import {
   buildTranslateRemarkRequest,
   buildExplainFindingRequest,
+  buildExplainHotnessRequest,
+  buildSynthesiseTopFindingsRequest,
 } from './promptLibrary';
-import type { RemarkContext, FindingContext } from './types';
+import type { RemarkContext, FindingContext, HotnessContext, SynthesisContext } from './types';
 
 const MODEL_CLASS_MAP = {
   small: 'small' as const,
@@ -83,6 +85,16 @@ export class LLMManager implements vscode.Disposable {
     };
     const req = buildExplainFindingRequest(ctx);
     return executeTask('explain_finding', req, this._router, this._cache, signal, this._routerCtx());
+  }
+
+  async explainHotness(ctx: HotnessContext, signal: AbortSignal): Promise<TaskResult> {
+    const req = buildExplainHotnessRequest(ctx);
+    return executeTask('explain_hotness', req, this._router, this._cache, signal, this._routerCtx());
+  }
+
+  async synthesiseTopFindings(ctx: SynthesisContext, signal: AbortSignal): Promise<TaskResult> {
+    const req = buildSynthesiseTopFindingsRequest(ctx);
+    return executeTask('synthesise_top_findings', req, this._router, this._cache, signal, this._routerCtx());
   }
 
   clearCache(): void {

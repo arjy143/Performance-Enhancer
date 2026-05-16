@@ -88,6 +88,18 @@
       {
         "command": "perfLens.importProfile",
         "title": "Perf Lens: Import Profile…"
+      },
+      {
+        "command": "perfLens.recordProfile",
+        "title": "Perf Lens: Record Profile…"
+      },
+      {
+        "command": "perfLens.compareProfiles",
+        "title": "Perf Lens: Compare Profiles…"
+      },
+      {
+        "command": "perfLens.synthesiseHotness",
+        "title": "Perf Lens: Synthesise Top Recommendations (AI)"
       }
     ],
     "menus": {

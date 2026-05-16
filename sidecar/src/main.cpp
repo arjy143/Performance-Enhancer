@@ -9,6 +9,7 @@
 #include "godbolt/compiler.hpp"
 #include "godbolt/diff_engine.hpp"
 #include "profile/store.hpp"
+#include "rules/packs/profile_driven/profile_rules.hpp"
 
 #ifdef PERF_LENS_HAVE_LLVM
 #include "ast/project.hpp"
@@ -292,15 +293,18 @@ int main(int argc, char* argv[]) {
     // -----------------------------------------------------------------------
 
     server.register_method("analyseFile",
-        [&findingStore
+        [&findingStore, &profileStore
 #ifdef PERF_LENS_HAVE_LLVM
         , &astProject, &ruleEngine
 #endif
         ](const perf_lens::json& params) -> perf_lens::json
     {
-        const auto file     = params.value("file",    std::string{});
-        const auto build_id = params.value("buildId", std::string{"analysis"});
+        const auto file       = params.value("file",      std::string{});
+        const auto build_id   = params.value("buildId",   std::string{"analysis"});
+        const auto profile_id = params.value("profileId", std::string{});
         if (file.empty()) throw std::invalid_argument("file is required");
+
+        int count = 0;
 
 #ifdef PERF_LENS_HAVE_LLVM
         if (astProject && ruleEngine) {
@@ -308,10 +312,22 @@ int main(int argc, char* argv[]) {
             const auto findings = ruleEngine->analyseFile(
                 file, astProject->database(), build_id);
             findingStore.insertBulk(findings);
-            return {{"count", static_cast<int>(findings.size())}, {"buildId", build_id}};
+            count = static_cast<int>(findings.size());
         }
 #endif
-        return {{"count", 0}, {"buildId", build_id}, {"note", "LLVM not available"}};
+
+        // Append profile-derived findings when a profile is active
+        if (!profile_id.empty()) {
+            const auto profFindings =
+                perf_lens::rules::profile_driven::analyseFileWithProfile(
+                    profile_id, file, profileStore);
+            if (!profFindings.empty()) {
+                findingStore.insertBulk(profFindings);
+                count += static_cast<int>(profFindings.size());
+            }
+        }
+
+        return {{"count", count}, {"buildId", build_id}};
     });
 
     server.register_method("getFindings",
@@ -527,6 +543,32 @@ int main(int argc, char* argv[]) {
         perf_lens::json arr = perf_lens::json::array();
         for (const auto& h : fns) arr.push_back(functionHotnessToJson(h));
         return arr;
+    });
+
+    server.register_method("getSourceHashes",
+        [&profileStore](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto profile_id = params.value("profileId", std::string{});
+        if (profile_id.empty()) throw std::invalid_argument("profileId is required");
+        const auto hashes = profileStore.getSourceHashes(profile_id);
+        perf_lens::json obj = perf_lens::json::object();
+        for (const auto& [file, hash] : hashes) obj[file] = hash;
+        return obj;
+    });
+
+    server.register_method("storeSourceHashes",
+        [&profileStore](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto profile_id = params.value("profileId", std::string{});
+        if (profile_id.empty()) throw std::invalid_argument("profileId is required");
+        const auto& hashes_obj = params.value("hashes", perf_lens::json::object());
+        std::vector<profile::SourceFileHash> hashes;
+        for (auto it = hashes_obj.begin(); it != hashes_obj.end(); ++it) {
+            if (it.value().is_string())
+                hashes.push_back({it.key(), it.value().get<std::string>()});
+        }
+        profileStore.storeSourceHashes(profile_id, hashes);
+        return {{"ok", true}};
     });
 
     // -----------------------------------------------------------------------

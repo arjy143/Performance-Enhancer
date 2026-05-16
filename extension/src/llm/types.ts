@@ -107,3 +107,18 @@ export interface FindingContext {
   optRemark?: string;
   hotness?: number;
 }
+
+export interface HotnessContext {
+  topFunctions: Array<{
+    function: string;
+    pct: number;
+    eventType: string;
+  }>;
+  profileLabel:      string;
+  totalSamples:      number;
+  activeFindings:    Array<{ ruleId: string; title: string; file: string; line: number }>;
+}
+
+export interface SynthesisContext extends HotnessContext {
+  cpuModel?: string;
+}
