@@ -1,0 +1,78 @@
+# Remark classification table
+# Maps compiler optimisation pass names (prefix match) to UI categories.
+# This file documents the built-in table in sidecar/src/remarks/classifier.cpp.
+# Future: the sidecar will load overrides from this file at startup.
+
+version: 1
+
+categories:
+  vectorisation:
+    label: "Vectorisation"
+    passes:
+      - "loop-vectorize"      # Clang/LLVM loop auto-vectoriser
+      - "slp-vectorizer"      # Superword-level parallelism
+    rule_hints:
+      - pass: "loop-vectorize"
+        name: "UnsafeMemDep"
+        rule: "perf-lens.vec.aliasing"
+        fix: "Add __restrict__ to pointer parameters"
+      - pass: "loop-vectorize"
+        name: "CFG"
+        rule: "perf-lens.vec.complex-cf"
+        fix: "Simplify loop body control flow"
+      - pass: "loop-vectorize"
+        name: "CantComputeNumberOfIterations"
+        rule: "perf-lens.vec.unbounded-loop"
+        fix: "Ensure loop bound is computable at loop entry"
+
+  inlining:
+    label: "Inlining"
+    passes:
+      - "inline"
+      - "always-inline"
+      - "mandatory-inline"
+    rule_hints:
+      - pass: "inline"
+        name: "TooCostly"
+        rule: "perf-lens.inline.large-function"
+        fix: "Consider splitting or annotating with [[gnu::always_inline]]"
+      - pass: "inline"
+        name: "NoDefinition"
+        rule: "perf-lens.inline.no-body"
+        fix: "Move function definition to header"
+
+  unrolling:
+    label: "Unrolling"
+    passes:
+      - "loop-unroll"
+    rule_hints:
+      - pass: "loop-unroll"
+        name: "Threshold"
+        rule: "perf-lens.unroll.large-body"
+        fix: "Reduce loop body size or annotate with #pragma unroll"
+
+  loop_transforms:
+    label: "Loop transforms"
+    passes:
+      - "loop-delete"
+      - "loop-distribute"
+      - "loop-interchange"
+      - "loop-fusion"
+      - "loop-load-elim"
+
+  memory:
+    label: "Memory"
+    passes:
+      - "licm"       # Loop-invariant code motion
+      - "gvn"        # Global value numbering
+      - "memcpyopt"  # memcpy optimisation
+
+  dead_code:
+    label: "Dead code"
+    passes:
+      - "dce"
+      - "adce"
+
+  other:
+    label: "Other"
+    passes: []

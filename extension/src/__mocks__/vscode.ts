@@ -1,5 +1,17 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
+const _mockDiagCollection = {
+  set: jest.fn(),
+  delete: jest.fn(),
+  clear: jest.fn(),
+  dispose: jest.fn(),
+};
+
+export const languages = {
+  createDiagnosticCollection: jest.fn(() => _mockDiagCollection),
+  registerHoverProvider: jest.fn(() => ({ dispose: jest.fn() })),
+};
+
 export const window = {
   createOutputChannel: (_name: string) => ({
     appendLine: (_line: string) => { /* noop */ },
@@ -10,6 +22,7 @@ export const window = {
   showErrorMessage:   (..._args: unknown[]) => Promise.resolve(undefined),
   showInformationMessage: (..._args: unknown[]) => Promise.resolve(undefined),
   activeTextEditor: undefined as undefined,
+  onDidChangeActiveTextEditor: jest.fn(() => ({ dispose: jest.fn() })),
   createStatusBarItem: (_alignment: number, _priority: number) => ({
     show: () => { /* noop */ },
     dispose: () => { /* noop */ },
@@ -19,10 +32,17 @@ export const window = {
     backgroundColor: undefined as unknown,
     name: '',
   }),
+  registerTreeDataProvider: jest.fn(() => ({ dispose: jest.fn() })),
 };
 
 export const workspace = {
   workspaceFolders: undefined as undefined,
+  createFileSystemWatcher: jest.fn(() => ({
+    onDidCreate: jest.fn(() => ({ dispose: jest.fn() })),
+    onDidChange: jest.fn(() => ({ dispose: jest.fn() })),
+    onDidDelete: jest.fn(() => ({ dispose: jest.fn() })),
+    dispose: jest.fn(),
+  })),
 };
 
 export const commands = {
@@ -35,8 +55,34 @@ export const env = {
 
 export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
 
+export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 } as const;
+
+export const DiagnosticTag = { Deprecated: 2, Unnecessary: 1 } as const;
+
+export class Diagnostic {
+  tags: number[] = [];
+  source?: string;
+  code?: string | number;
+  constructor(
+    public range: Range,
+    public message: string,
+    public severity: number,
+  ) {}
+}
+
+export class Range {
+  constructor(
+    public startLine: number, public startChar: number,
+    public endLine:   number, public endChar:   number,
+  ) {}
+}
+
 export class ThemeColor {
   constructor(public readonly id: string) {}
+}
+
+export class ThemeIcon {
+  constructor(public readonly id: string, public readonly color?: ThemeColor) {}
 }
 
 export class Uri {
@@ -48,4 +94,32 @@ export class Uri {
   }
 }
 
-export const DiagnosticTag = { Deprecated: 2, Unnecessary: 1 } as const;
+export class EventEmitter {
+  event = jest.fn();
+  fire = jest.fn();
+  dispose = jest.fn();
+}
+
+export class MarkdownString {
+  isTrusted = false;
+  constructor(public value = '', _supportThemes = false) {}
+}
+
+export class Hover {
+  constructor(public contents: MarkdownString, public range?: Range) {}
+}
+
+export class TreeItem {
+  label?: string;
+  description?: string;
+  tooltip?: string;
+  command?: unknown;
+  iconPath?: unknown;
+  contextValue?: string;
+  collapsibleState: number;
+  constructor(_labelOrUri: unknown, collapsibleState = 0) {
+    this.collapsibleState = collapsibleState;
+  }
+}
+
+export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 } as const;

@@ -1,0 +1,21 @@
+--- !Missed
+Pass:            inline
+Name:            TooCostly
+DebugLoc:        { File: '/tmp/math.cpp', Line: 12, Column: 10 }
+Function:        process
+Args:
+  - Callee:          'compute_force'
+  - String:          ' will not be inlined into '
+  - Caller:          'process'
+  - String:          ' because its definition is unavailable'
+...
+--- !Passed
+Pass:            inline
+Name:            Inlined
+DebugLoc:        { File: '/tmp/math.cpp', Line: 30, Column: 5 }
+Function:        main
+Args:
+  - Callee:          'fast_sqrt'
+  - String:          ' inlined into '
+  - Caller:          'main'
+...

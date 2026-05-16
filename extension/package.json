@@ -2,7 +2,7 @@
   "name": "perf-lens",
   "displayName": "Perf Lens",
   "description": "C++ performance advisor: static analysis, compiler remarks, and profile-guided optimisation — all in VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "perf-lens",
   "private": true,
   "engines": {
@@ -17,6 +17,24 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "perfLens",
+          "title": "Perf Lens",
+          "icon": "$(pulse)"
+        }
+      ]
+    },
+    "views": {
+      "perfLens": [
+        {
+          "id": "perfLens.remarks",
+          "name": "Compiler Remarks",
+          "when": "perf-lens:active"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "perfLens.analyseFile",
@@ -25,8 +43,26 @@
       {
         "command": "perfLens.showPerfPanel",
         "title": "Perf Lens: Show Performance Panel"
+      },
+      {
+        "command": "perfLens.regenerateRemarks",
+        "title": "Perf Lens: Regenerate Remarks for This File",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "perfLens.goToRemark",
+        "title": "Perf Lens: Go to Remark"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "perfLens.regenerateRemarks",
+          "when": "resourceLangId == cpp || resourceLangId == c",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Perf Lens",
       "properties": {
