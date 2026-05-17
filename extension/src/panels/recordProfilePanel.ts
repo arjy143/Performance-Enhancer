@@ -1,3 +1,5 @@
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { type ProfileManager } from '../profile/profileManager';
 import { logger } from '../util/logger';
@@ -82,7 +84,7 @@ export class RecordProfilePanel implements vscode.Disposable {
 
     const preset = PRESETS[opts.preset] ?? PRESETS['hotspots'];
     const events = preset.events.join(',');
-    const outFile = `/tmp/perf-lens-${Date.now()}.data`;
+    const outFile = path.join(os.tmpdir(), `perf-lens-${Date.now()}.data`);
     const cmd = [
       'perf', 'record',
       `-F`, String(opts.freq),
@@ -140,6 +142,8 @@ export class RecordProfilePanel implements vscode.Disposable {
     const presetOptions = Object.entries(PRESETS).map(([key, p]) =>
       `<option value="${key}">${escHtml(p.label)}</option>`,
     ).join('');
+    const defaultFreq = vscode.workspace.getConfiguration('perfLens')
+      .get<number>('profile.defaultFrequency', 999);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -178,7 +182,7 @@ export class RecordProfilePanel implements vscode.Disposable {
   <select id="preset">${presetOptions}</select>
 </label>
 <label>Sampling frequency (Hz)
-  <input id="freq" type="number" value="999" min="1" max="9999" />
+  <input id="freq" type="number" value="${defaultFreq}" min="1" max="9999" />
   <div class="hint">Higher = more detail, higher overhead. 999 Hz is recommended.</div>
 </label>
 <div class="warn">

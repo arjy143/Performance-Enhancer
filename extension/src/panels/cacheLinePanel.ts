@@ -70,8 +70,9 @@ export class CacheLinePanel implements vscode.Disposable {
     const wastedBytes = info?.wastedBytes ?? 0;
     const totalSize   = info?.totalSize   ?? 0;
 
-    // Build cache-line grid: 64 bytes per cache line
-    const CACHE_LINE = 64;
+    // Build cache-line grid — configurable for architectures with wider fetch blocks.
+    const CACHE_LINE = vscode.workspace.getConfiguration('perfLens')
+      .get<number>('architecture.cacheLineBytes', 64);
     const numLines   = Math.ceil(totalSize / CACHE_LINE);
 
     const lineGrids: string[] = [];

@@ -117,6 +117,7 @@ async function _initialiseAsync(
 
   // Phase 6: profile integration
   const profileManager = new ProfileManager(sidecar);
+  profileManager.setWorkspaceState(ctx.workspaceState);
   ctx.subscriptions.push(profileManager);
   await profileManager.refreshProfiles();
 
@@ -124,6 +125,18 @@ async function _initialiseAsync(
 
   const hotnessProvider = new GutterHeatmapProvider(profileManager);
   ctx.subscriptions.push(hotnessProvider);
+
+  // Update status bar when the active profile changes.
+  ctx.subscriptions.push(
+    profileManager.onProfileChanged(profileId => {
+      if (profileId) {
+        const meta = profileManager.profiles.find(p => p.id === profileId);
+        statusBar.setProfileLoaded(meta?.label);
+      } else {
+        statusBar.setReady();
+      }
+    }),
+  );
 
   // Staleness check on save
   ctx.subscriptions.push(
@@ -138,6 +151,11 @@ async function _initialiseAsync(
   const llm = new LLMManager(ctx.globalStorageUri);
   ctx.subscriptions.push(llm);
   _initLLMProviders(llm);
+
+  // Budget warning: update status bar when threshold crossed.
+  ctx.subscriptions.push(
+    llm.onBudgetWarning(pct => statusBar.setBudgetWarning(pct)),
+  );
 
   // Probe provider health asynchronously — don't block activation.
   if (llm.hasProviders) {
@@ -531,7 +549,8 @@ async function _initialiseAsync(
       const afterMap  = new Map(afterFns.map(f => [f.function, f.fraction]));
       const allFns    = new Set([...beforeMap.keys(), ...afterMap.keys()]);
 
-      const REGRESSION_THRESHOLD = 0.02;
+      const REGRESSION_THRESHOLD =
+        vscode.workspace.getConfiguration('perfLens').get<number>('profile.regressionThreshold', 2) / 100;
       const rows = [...allFns].map(fn => {
         const b = beforeMap.get(fn) ?? 0;
         const a = afterMap.get(fn)  ?? 0;

@@ -193,11 +193,6 @@
           "default": "",
           "description": "Path to the C++ compiler (empty = auto-detect from PATH)."
         },
-        "perfLens.godbolt.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable opt-in integration with godbolt.org."
-        },
         "perfLens.telemetry.enabled": {
           "type": "boolean",
           "default": false,
@@ -212,6 +207,21 @@
           "type": "number",
           "default": 50,
           "description": "Maximum number of findings shown per file."
+        },
+        "perfLens.profile.defaultFrequency": {
+          "type": "number",
+          "default": 999,
+          "description": "Default sampling frequency (Hz) used when recording a profile. Higher values give more detail at higher overhead."
+        },
+        "perfLens.profile.regressionThreshold": {
+          "type": "number",
+          "default": 2,
+          "description": "Minimum percentage-point delta to classify a function as a regression or improvement in the Compare Profiles view."
+        },
+        "perfLens.architecture.cacheLineBytes": {
+          "type": "number",
+          "default": 64,
+          "description": "CPU cache line size in bytes used for the Cache-Line Layout panel. Use 64 for most x86 CPUs; some AMD chips have 128-byte fetch blocks."
         }
       }
     }

@@ -35,6 +35,11 @@ export class LLMManager implements vscode.Disposable {
   private readonly _cache: LLMCache;
   private readonly _router: TaskRouter;
 
+  private _sessionSpendUSD = 0;
+  private _budgetWarnFired = false;
+  private readonly _onBudgetWarning = new vscode.EventEmitter<number>();
+  readonly onBudgetWarning = this._onBudgetWarning.event;
+
   constructor(storageUri: vscode.Uri) {
     const storageDir = storageUri.fsPath;
     if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
@@ -74,7 +79,9 @@ export class LLMManager implements vscode.Disposable {
       optLevel: '-O2',
     };
     const req = buildTranslateRemarkRequest(ctx);
-    return executeTask('translate_opt_remark', req, this._router, this._cache, signal, this._routerCtx());
+    const routerCtx = this._routerCtx();
+    const result = await executeTask('translate_opt_remark', req, this._router, this._cache, signal, routerCtx);
+    return this._withSpendTracking(result, routerCtx);
   }
 
   async explainFinding(
@@ -88,17 +95,23 @@ export class LLMManager implements vscode.Disposable {
       snippet,
     };
     const req = buildExplainFindingRequest(ctx);
-    return executeTask('explain_finding', req, this._router, this._cache, signal, this._routerCtx());
+    const routerCtx = this._routerCtx();
+    const result = await executeTask('explain_finding', req, this._router, this._cache, signal, routerCtx);
+    return this._withSpendTracking(result, routerCtx);
   }
 
   async explainHotness(ctx: HotnessContext, signal: AbortSignal): Promise<TaskResult> {
     const req = buildExplainHotnessRequest(ctx);
-    return executeTask('explain_hotness', req, this._router, this._cache, signal, this._routerCtx());
+    const routerCtx = this._routerCtx();
+    const result = await executeTask('explain_hotness', req, this._router, this._cache, signal, routerCtx);
+    return this._withSpendTracking(result, routerCtx);
   }
 
   async synthesiseTopFindings(ctx: SynthesisContext, signal: AbortSignal): Promise<TaskResult> {
     const req = buildSynthesiseTopFindingsRequest(ctx);
-    return executeTask('synthesise_top_findings', req, this._router, this._cache, signal, this._routerCtx());
+    const routerCtx = this._routerCtx();
+    const result = await executeTask('synthesise_top_findings', req, this._router, this._cache, signal, routerCtx);
+    return this._withSpendTracking(result, routerCtx);
   }
 
   clearCache(): void {
@@ -106,8 +119,52 @@ export class LLMManager implements vscode.Disposable {
     void this._cache.persist();
   }
 
+  get sessionSpendUSD(): number { return this._sessionSpendUSD; }
+
   dispose(): void {
     void this._cache.persist();
+    this._onBudgetWarning.dispose();
+  }
+
+  // Called after each successful remote call. Estimates cost from output
+  // character count (~4 chars/token, $0.002/1k tokens as a conservative average).
+  private _recordSpend(outputChars: number): void {
+    const cfg = vscode.workspace.getConfiguration('perfLens');
+    const budget = cfg.get<number>('llm.budgetUSD');
+    if (!budget) return;
+
+    const estimatedTokens = outputChars / 4;
+    this._sessionSpendUSD += estimatedTokens * 0.000002;
+
+    if (!this._budgetWarnFired) {
+      const warnAt = cfg.get<number>('llm.warnAtPercent', 80);
+      const pct = (this._sessionSpendUSD / budget) * 100;
+      if (pct >= warnAt) {
+        this._budgetWarnFired = true;
+        this._onBudgetWarning.fire(pct);
+      }
+    }
+  }
+
+  // Wraps a TaskResult stream to count output chars and record spend.
+  private _withSpendTracking(result: TaskResult, ctx: ReturnType<typeof this._routerCtx>): TaskResult {
+    if (result.type !== 'success' || !result.stream) return result;
+    if (!ctx.allowRemote) return result;
+    if (!this._providers.some(p => !p.capabilities.isLocal)) return result;
+
+    const originalStream = result.stream;
+    const self = this;
+    return {
+      ...result,
+      stream: (async function* () {
+        let chars = 0;
+        for await (const chunk of originalStream) {
+          if (chunk.type === 'text') chars += chunk.content?.length ?? 0;
+          yield chunk;
+        }
+        self._recordSpend(chars);
+      })(),
+    };
   }
 
   private _routerCtx(): RouterContext {

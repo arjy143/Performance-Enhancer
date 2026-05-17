@@ -13,6 +13,7 @@ import { logger } from '../util/logger';
 export class ProfileManager implements vscode.Disposable {
   private _activeProfileId: string | undefined;
   private _profiles: ProfileMetadata[] = [];
+  private _workspaceState?: vscode.Memento;
 
   // line hotness cache: "profileId:file:line:event" → LineHotness
   private _hotnessCache = new Map<string, LineHotness>();
@@ -21,6 +22,10 @@ export class ProfileManager implements vscode.Disposable {
   readonly onProfileChanged = this._onProfileChanged.event;
 
   constructor(private readonly _client: SidecarClient) {}
+
+  setWorkspaceState(state: vscode.Memento): void {
+    this._workspaceState = state;
+  }
 
   get activeProfileId(): string | undefined { return this._activeProfileId; }
   get profiles(): readonly ProfileMetadata[] { return this._profiles; }
@@ -116,44 +121,35 @@ export class ProfileManager implements vscode.Disposable {
   // Call after a document save. If the saved file was part of the active
   // profile's snapshot, computes its current hash and warns if it changed.
   async checkStaleness(uri: vscode.Uri): Promise<void> {
-    if (!this._activeProfileId) return;
+    if (!this._activeProfileId || !this._workspaceState) return;
     const file = uri.fsPath;
-    try {
-      const hashes = await this._client.request<Record<string, string>>(
-        'getSourceHashes', { profileId: this._activeProfileId },
+    const key = `perfLens.sourceHashes.${this._activeProfileId}`;
+    const hashes = this._workspaceState.get<Record<string, string>>(key, {});
+    if (!(file in hashes)) return;
+    const current = hashFile(file);
+    if (current && current !== hashes[file]) {
+      const choice = await vscode.window.showInformationMessage(
+        `Perf Lens: source file "${file.split('/').pop()}" has changed since this profile was recorded. Hotness data may be stale.`,
+        'Re-profile', 'Show Profile Panel', 'Dismiss',
       );
-      if (!(file in hashes)) return;
-      const current = hashFile(file);
-      if (current && current !== hashes[file]) {
-        const choice = await vscode.window.showInformationMessage(
-          `Perf Lens: source file "${file.split('/').pop()}" has changed since this profile was recorded. Hotness data may be stale.`,
-          'Re-profile', 'Show Profile Panel', 'Dismiss',
-        );
-        if (choice === 'Re-profile') {
-          await vscode.commands.executeCommand('perfLens.recordProfile');
-        } else if (choice === 'Show Profile Panel') {
-          await vscode.commands.executeCommand('perfLens.showProfilePanel');
-        }
+      if (choice === 'Re-profile') {
+        await vscode.commands.executeCommand('perfLens.recordProfile');
+      } else if (choice === 'Show Profile Panel') {
+        await vscode.commands.executeCommand('perfLens.showProfilePanel');
       }
-    } catch {
-      // Silently ignore — staleness check is best-effort
     }
   }
 
   // Store current file hashes for the active profile (call after import).
   async snapshotSourceHashes(files: string[]): Promise<void> {
-    if (!this._activeProfileId) return;
+    if (!this._activeProfileId || !this._workspaceState) return;
     const hashes: Record<string, string> = {};
     for (const f of files) {
       const h = hashFile(f);
       if (h) hashes[f] = h;
     }
-    try {
-      await this._client.request<unknown>('storeSourceHashes', {
-        profileId: this._activeProfileId,
-        hashes,
-      });
-    } catch { /* best-effort */ }
+    const key = `perfLens.sourceHashes.${this._activeProfileId}`;
+    await this._workspaceState.update(key, hashes);
   }
 
   dispose(): void {

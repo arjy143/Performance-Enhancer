@@ -38,5 +38,18 @@ export class PerfLensStatusBar implements vscode.Disposable {
     this._item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   }
 
+  setProfileLoaded(label?: string): void {
+    const suffix = label ? `: ${label}` : '';
+    this._item.text    = `$(graph) Perf Lens: profile loaded${suffix}`;
+    this._item.tooltip = 'Perf Lens: profile active — click to open Performance Panel';
+    this._item.backgroundColor = undefined;
+  }
+
+  setBudgetWarning(pctUsed: number): void {
+    this._item.text    = `$(warning) Perf Lens: ${pctUsed.toFixed(0)}% budget used`;
+    this._item.tooltip = `Perf Lens: estimated ${pctUsed.toFixed(0)}% of your LLM budget consumed this session`;
+    this._item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+  }
+
   dispose(): void { this._item.dispose(); }
 }

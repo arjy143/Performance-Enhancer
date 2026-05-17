@@ -31,7 +31,11 @@ export class OptRecordsWatcher implements vscode.Disposable {
     try {
       await this._client.request('ingestRemarksFile', { path });
     } catch (err) {
-      logger.warn('watcher: ingestRemarksFile failed for', path, err);
+      const msg = (err as Error).message ?? String(err);
+      logger.warn('watcher: ingestRemarksFile failed for', path, msg);
+      void vscode.window.showWarningMessage(
+        `Perf Lens: failed to ingest compiler remarks from ${path.split('/').pop()} — ${msg}`,
+      );
       return;
     }
     this._panel.refresh();
