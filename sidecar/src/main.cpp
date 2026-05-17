@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <string_view>
 #include <unistd.h>
@@ -34,6 +35,83 @@ std::filesystem::path workspace_from_args(int argc, char* argv[]) {
             return std::filesystem::path{arg.substr(prefix.size())};
     }
     return std::filesystem::current_path();
+}
+
+// Returns the --sarif=<path> output path if present, or empty string.
+std::string sarif_output_from_args(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+        constexpr std::string_view prefix{"--sarif="};
+        if (arg.starts_with(prefix))
+            return std::string{arg.substr(prefix.size())};
+        if (arg == "--sarif")
+            return "-"; // stdout
+    }
+    return {};
+}
+
+// Build and write a SARIF 2.1.0 document from a set of findings.
+perf_lens::json findings_to_sarif(
+    const std::vector<perf_lens::rules::Finding>& findings,
+    const std::string& workspace)
+{
+    perf_lens::json rules_arr = perf_lens::json::array();
+    perf_lens::json results_arr = perf_lens::json::array();
+
+    std::set<std::string> seen_rules;
+    for (const auto& f : findings) {
+        if (seen_rules.insert(f.rule_id).second) {
+            rules_arr.push_back({
+                {"id", f.rule_id},
+                {"name", f.title},
+                {"shortDescription", {{"text", f.title}}},
+                {"defaultConfiguration", {{"level",
+                    f.confidence == perf_lens::rules::ConfidenceLevel::Low ? "note" : "warning"
+                }}},
+            });
+        }
+
+        std::string rel_path = f.file;
+        if (!workspace.empty() && rel_path.starts_with(workspace)) {
+            rel_path = rel_path.substr(workspace.size());
+            if (!rel_path.empty() && rel_path.front() == '/') rel_path = rel_path.substr(1);
+        }
+
+        results_arr.push_back({
+            {"ruleId", f.rule_id},
+            {"level", f.confidence == perf_lens::rules::ConfidenceLevel::Low ? "note" : "warning"},
+            {"message", {{"text", f.message}}},
+            {"locations", perf_lens::json::array({
+                {{"physicalLocation", {
+                    {"artifactLocation", {
+                        {"uri", rel_path},
+                        {"uriBaseId", "%SRCROOT%"},
+                    }},
+                    {"region", {
+                        {"startLine", f.line},
+                        {"startColumn", f.column > 0 ? f.column : 1},
+                    }},
+                }}},
+            })},
+        });
+    }
+
+    return {
+        {"version", "2.1.0"},
+        {"$schema", "https://json.schemastore.org/sarif-2.1.0.json"},
+        {"runs", perf_lens::json::array({
+            {
+                {"tool", {{"driver", {
+                    {"name", "perf-lens"},
+                    {"version", "1.0.0"},
+                    {"informationUri", "https://github.com/perf-lens/perf-lens"},
+                    {"rules", rules_arr},
+                }}}},
+                {"results", results_arr},
+                {"originalUriBaseIds", {{"%SRCROOT%", {{"uri", "file://" + workspace + "/"}}}}},
+            }
+        })},
+    };
 }
 
 perf_lens::json remarkToJson(const perf_lens::remarks::OptRemark& r) {
@@ -184,10 +262,73 @@ perf_lens::json findingToJson(const perf_lens::rules::Finding& f) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    const auto workspace = workspace_from_args(argc, argv);
+    const auto workspace    = workspace_from_args(argc, argv);
+    const auto sarif_output = sarif_output_from_args(argc, argv);
 
     auto& log = perf_lens::Logger::instance();
     log.init(workspace / ".perf-lens" / "logs");
+
+    if (!sarif_output.empty()) {
+        // -----------------------------------------------------------------------
+        // Headless CI mode: analyse all C/C++ files and emit SARIF.
+        // -----------------------------------------------------------------------
+#ifndef PERF_LENS_HAVE_LLVM
+        std::fprintf(stderr,
+            "perf-lens: --sarif mode requires a build with LLVM/Clang support "
+            "(PERF_LENS_HAVE_LLVM).\n");
+        return EXIT_FAILURE;
+#else
+        log.info("CI/SARIF mode: workspace=" + workspace.string() + " output=" + sarif_output);
+
+        perf_lens::rules::RuleEngine ruleEngine;
+        std::unique_ptr<perf_lens::ast::AstProject> projectPtr;
+        try {
+            projectPtr = std::make_unique<perf_lens::ast::AstProject>(workspace);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "perf-lens: cannot load compile_commands.json: %s\n", e.what());
+            return EXIT_FAILURE;
+        }
+        auto& project = *projectPtr;
+
+        std::vector<perf_lens::rules::Finding> all_findings;
+        const auto files = project.allFiles();
+        log.info("Analysing " + std::to_string(files.size()) + " files");
+
+        for (const auto& file : files) {
+            try {
+                auto findings = ruleEngine.analyseFile(
+                    file, project.database(), "ci");
+                all_findings.insert(all_findings.end(),
+                    std::make_move_iterator(findings.begin()),
+                    std::make_move_iterator(findings.end()));
+            } catch (const std::exception& e) {
+                log.warn("CI: skipping " + file + ": " + e.what());
+            }
+        }
+
+        log.info("Total findings: " + std::to_string(all_findings.size()));
+
+        const auto sarif = findings_to_sarif(all_findings, workspace.string());
+        const auto sarif_str = sarif.dump(2);
+
+        if (sarif_output == "-") {
+            std::fputs(sarif_str.c_str(), stdout);
+            std::fputc('\n', stdout);
+        } else {
+            std::ofstream out(sarif_output);
+            if (!out.is_open()) {
+                std::fprintf(stderr, "perf-lens: cannot write SARIF to %s\n",
+                             sarif_output.c_str());
+                return EXIT_FAILURE;
+            }
+            out << sarif_str << '\n';
+            log.info("SARIF written to " + sarif_output);
+        }
+
+        return EXIT_SUCCESS;
+#endif
+    }
+
     log.info("perf-lens-sidecar v1.0.0 starting");
     log.info(std::string("workspace: ") + workspace.string());
 

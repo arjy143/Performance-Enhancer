@@ -24,6 +24,7 @@ import { verifyPatch } from './fixProvider/verifier';
 import { ProfileManager } from './profile/profileManager';
 import { GutterHeatmapProvider } from './profile/hotnessProvider';
 import { ProfilePanel } from './panels/profilePanel';
+import { FlameGraphPanel } from './panels/flameGraphPanel';
 import { RecordProfilePanel } from './panels/recordProfilePanel';
 import { ProfileComparePanel } from './panels/profileComparePanel';
 import { buildSarifLog } from './sarif/exporter';
@@ -282,6 +283,74 @@ async function _initialiseAsync(
       void vscode.window.showInformationMessage('Perf Lens: LLM cache cleared.');
     }),
 
+    vscode.commands.registerCommand('perfLens.translateFileRemarks', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        void vscode.window.showWarningMessage('Perf Lens: open a C++ file to translate its remarks.');
+        return;
+      }
+      if (!llm.hasProviders) {
+        void vscode.window.showInformationMessage(
+          'Perf Lens: configure an LLM provider in settings to use AI translation.',
+        );
+        return;
+      }
+
+      const filePath = editor.document.uri.fsPath;
+      let remarks: OptRemark[];
+      try {
+        remarks = await sidecar.request<OptRemark[]>('getRemarks', { file: filePath }, new AbortController().signal);
+      } catch {
+        void vscode.window.showWarningMessage('Perf Lens: no remarks available for this file (rebuild with shadow compile first).');
+        return;
+      }
+
+      if (remarks.length === 0) {
+        void vscode.window.showInformationMessage('Perf Lens: no optimisation remarks found for this file.');
+        return;
+      }
+
+      const label = path.basename(filePath);
+      const panel = ExplanationPanel.show(ctx, `Remarks: ${label} (${remarks.length})`);
+      const ctrl  = new AbortController();
+
+      for (let i = 0; i < remarks.length; i++) {
+        if (ctrl.signal.aborted) break;
+        const remark = remarks[i];
+        panel.startSection(`[${i + 1}/${remarks.length}] ${remark.pass}/${remark.name} (line ${remark.line})`);
+        const snippet = readSnippet(remark.file, remark.line);
+        const result  = await llm.translateRemark(remark, snippet, ctrl.signal);
+        if (result.type === 'silent_degrade') {
+          panel.showDegrade(`Remark ${i + 1}: ${result.reason ?? 'No provider available.'}`);
+          break;
+        } else if (result.stream) {
+          await panel.streamResult(result.stream, ctrl.signal);
+        }
+      }
+    }),
+
+    vscode.commands.registerCommand('perfLens.suggestRefactor', async (finding: Finding) => {
+      if (!llm.hasProviders) {
+        void vscode.window.showInformationMessage(
+          'Perf Lens: configure an LLM provider in settings to use AI suggestions.',
+        );
+        return;
+      }
+      const panel   = ExplanationPanel.show(ctx, `Refactor: ${finding.title}`);
+      const ctrl    = new AbortController();
+      const snippet = readSnippet(finding.file, finding.line, 20);
+      const allFindings = findingsProvider.findingsInFile(finding.file);
+      const related = allFindings
+        .filter(f => f.ruleId !== finding.ruleId && Math.abs(f.line - finding.line) <= 50)
+        .map(f => ({ ruleId: f.ruleId, title: f.title, line: f.line }));
+      const result  = await llm.suggestNovelRefactor(finding, snippet, related, ctrl.signal);
+      if (result.type === 'silent_degrade') {
+        panel.showDegrade(result.reason ?? 'No provider available (frontier model required).');
+      } else if (result.stream) {
+        await panel.streamResult(result.stream, ctrl.signal);
+      }
+    }),
+
     // Phase 5: code actions
     vscode.languages.registerCodeActionsProvider(
       [{ language: 'cpp' }, { language: 'c' }],
@@ -370,6 +439,10 @@ async function _initialiseAsync(
 
     vscode.commands.registerCommand('perfLens.compareProfiles', () => {
       ProfileComparePanel.show(ctx, profileManager);
+    }),
+
+    vscode.commands.registerCommand('perfLens.showFlameGraph', () => {
+      FlameGraphPanel.show(ctx, sidecar, profileManager.activeProfileId ?? undefined);
     }),
 
     vscode.commands.registerCommand('perfLens.synthesiseHotness', async () => {

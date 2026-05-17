@@ -56,7 +56,7 @@ This writes `compile_commands.json` in the project root.
 
 ### Static analysis
 
-Perf Lens runs 18 rules against your source files and shows findings as yellow squiggles in the editor.
+Perf Lens runs 23 rules against your source files and shows findings as yellow squiggles in the editor.
 
 **How it works:** findings appear automatically when you open or save a `.cpp`/`.c` file. The first analysis of a large file may take 1–2 seconds; subsequent analyses are faster due to AST caching.
 
@@ -98,8 +98,14 @@ suppressions:
 | Const / constexpr | `constexpr.promotion-variable` | `const int x = 42` that could be `constexpr` |
 | Const / constexpr | `constexpr.promotion-function` | A pure function that could be `constexpr` |
 | Function attributes | `noexcept.move-ops` | Move constructor/assignment without `noexcept` (forces copy on vector resize) |
-| Safety | `ub.signed-loop-bound` | Signed loop variable compared to `size()` (unsigned) — potential UB |
+| Safety | `ub.signed-loop-bound` | Signed loop variable compared to `size()` (unsigned); potential UB |
 | Concurrency | `concurrency.mutex-where-atomic` | `std::mutex` protecting a single integer (use `std::atomic` instead) |
+| STL | `stl.nodiscard-return` | Ignoring a `[[nodiscard]]` return value (result silently discarded) |
+| Hot path | `hotpath.shared-ptr-in-loop` | `std::shared_ptr` copy inside a loop (atomic refcount on every iteration) |
+| STL | `stl.container-copy` | `auto v = getContainer()` copies the whole container (use `const auto&`) |
+| Hot path | `hotpath.map-in-loop` | `std::map`/`std::set` lookup inside a loop (O(log N) with pointer chasing) |
+| STL | `stl.string-view-param` | `const std::string&` parameter that could be `std::string_view` |
+| Hot path | `hotpath.unordered-map-no-reserve` | Inserting into `unordered_map`/`set` in a loop without `reserve()` |
 
 ---
 
@@ -166,10 +172,12 @@ The **Compiler Remarks** panel in the activity bar groups remarks by file and ca
 
 ### AI explain and translate
 
-With an LLM provider configured, two AI features become available:
+With an LLM provider configured, four AI features become available:
 
 - **Explain with AI** — shown in the hover card of any finding; explains why the pattern hurts performance and what to do about it in the context of your specific code
 - **Translate Remark** — converts a raw compiler remark (`loop not vectorized: unsafe dependent memory operations`) into plain English
+- **Suggest Novel Refactor** (`Ctrl+.` on any finding, or command palette) — uses a frontier model to propose a deeper architectural refactoring beyond the obvious fix; considers data-structure changes, SIMD opportunities, and algorithmic improvements
+- **Translate All Remarks in File** — command palette `Perf Lens: Translate All Remarks in File (AI)` — runs translation on every remark in the active file and streams all results into a single panel
 
 **Configure Ollama (local, no API key):**
 ```bash
@@ -228,10 +236,21 @@ Importing a profile re-sorts all findings by measured hotness and adds `[X.X% cy
 ### Exporting results
 
 **SARIF export** (for CI or code review tools):  
-`Ctrl+Shift+P` → `Perf Lens: Export Findings as SARIF…`
+`Ctrl+Shift+P` → `Perf Lens: Export Findings as SARIF...`
+
+**Headless CI mode** — run the sidecar directly without VS Code:
+```bash
+./perf-lens-sidecar --workspace=/path/to/project --sarif=findings.sarif
+# Write to stdout instead:
+./perf-lens-sidecar --workspace=/path/to/project --sarif
+```
+Requires a build with LLVM support and a `compile_commands.json` in the workspace. Exits with code 0 on completion (findings are non-fatal). Pipe the output into any SARIF-aware CI tool (GitHub Code Scanning, GitLab SAST, etc.).
+
+**Flame graph** — visualise where CPU time is spent across functions:  
+`Ctrl+Shift+P` → `Perf Lens: Show Flame Graph` (requires an imported profile)
 
 **Diagnostic bundle** (full JSON snapshot of findings, remarks, and profile data):  
-`Ctrl+Shift+P` → `Perf Lens: Export Diagnostic Bundle…`
+`Ctrl+Shift+P` → `Perf Lens: Export Diagnostic Bundle...`
 
 ---
 

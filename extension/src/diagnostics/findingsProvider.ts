@@ -253,6 +253,10 @@ export class FindingsDiagnosticProvider implements vscode.Disposable {
     return (this._findingsCache.get(file) ?? []).filter(f => f.line === line);
   }
 
+  findingsInFile(file: string): Finding[] {
+    return this._findingsCache.get(file) ?? [];
+  }
+
   clearFile(uri: vscode.Uri): void {
     this._collection.delete(uri);
     this._findingsCache.delete(uri.fsPath);

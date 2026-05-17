@@ -23,6 +23,11 @@
 #include "packs/memory_layout/cache_line_straddle.hpp"
 #include "packs/memory_layout/aos_to_soa.hpp"
 #include "packs/constexpr/promotion_function.hpp"
+#include "packs/hotpath/shared_ptr_in_loop.hpp"
+#include "packs/stl_hygiene/container_copy.hpp"
+#include "packs/hotpath/map_in_loop.hpp"
+#include "packs/stl_hygiene/string_view_param.hpp"
+#include "packs/hotpath/unordered_map_no_reserve.hpp"
 
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Tooling/JSONCompilationDatabase.h>
@@ -48,6 +53,11 @@ RuleEngine::RuleEngine() {
     _rules.push_back(std::make_unique<CacheLineStraddleRule>());
     _rules.push_back(std::make_unique<AosToSoaRule>());
     _rules.push_back(std::make_unique<PromotionFunctionRule>());
+    _rules.push_back(std::make_unique<SharedPtrInLoopRule>());
+    _rules.push_back(std::make_unique<ContainerCopyRule>());
+    _rules.push_back(std::make_unique<MapInLoopRule>());
+    _rules.push_back(std::make_unique<StringViewParamRule>());
+    _rules.push_back(std::make_unique<UnorderedMapNoReserveRule>());
 }
 
 std::vector<Finding> RuleEngine::analyseFile(

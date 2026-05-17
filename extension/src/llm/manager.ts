@@ -14,8 +14,9 @@ import {
   buildExplainFindingRequest,
   buildExplainHotnessRequest,
   buildSynthesiseTopFindingsRequest,
+  buildSuggestNovelRefactorRequest,
 } from './promptLibrary';
-import type { RemarkContext, FindingContext, HotnessContext, SynthesisContext } from './types';
+import type { RemarkContext, FindingContext, HotnessContext, SynthesisContext, RefactorContext } from './types';
 
 const MODEL_CLASS_MAP = {
   small: 'small' as const,
@@ -111,6 +112,26 @@ export class LLMManager implements vscode.Disposable {
     const req = buildSynthesiseTopFindingsRequest(ctx);
     const routerCtx = this._routerCtx();
     const result = await executeTask('synthesise_top_findings', req, this._router, this._cache, signal, routerCtx);
+    return this._withSpendTracking(result, routerCtx);
+  }
+
+  async suggestNovelRefactor(
+    finding: Finding,
+    snippet: string,
+    relatedFindings: Array<{ ruleId: string; title: string; line: number }>,
+    signal: AbortSignal,
+  ): Promise<TaskResult> {
+    const ctx: RefactorContext = {
+      ruleId: finding.ruleId,
+      title: finding.title,
+      snippet,
+      file: finding.file,
+      line: finding.line,
+      findings: relatedFindings,
+    };
+    const req = buildSuggestNovelRefactorRequest(ctx);
+    const routerCtx = this._routerCtx();
+    const result = await executeTask('suggest_novel_refactor', req, this._router, this._cache, signal, routerCtx);
     return this._withSpendTracking(result, routerCtx);
   }
 

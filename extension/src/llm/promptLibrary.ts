@@ -1,4 +1,4 @@
-import type { RemarkContext, FindingContext, HotnessContext, SynthesisContext, CompletionRequest } from './types';
+import type { RemarkContext, FindingContext, HotnessContext, SynthesisContext, RefactorContext, CompletionRequest } from './types';
 
 // Bump these when prompts change — cache keys include the version.
 export const PROMPT_VERSIONS = {
@@ -183,5 +183,51 @@ Synthesise the top 3 most impactful recommendations.`;
     temperature: 0.2,
     maxTokens: 600,
     responseFormat: 'json',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// suggest_novel_refactor — frontier-model deep refactor suggestion
+// ---------------------------------------------------------------------------
+
+const SUGGEST_NOVEL_REFACTOR_SYSTEM = `You are a senior C++ performance engineer specialising in low-latency and high-throughput systems. You will be given a code snippet with one or more performance findings and asked to propose a concrete, novel refactoring strategy.
+
+Your proposal must go beyond the obvious fix already identified by the static analyser. Consider: data-structure redesign, algorithmic improvement, SIMD/loop restructuring, lock-free concurrency, memory layout changes, template metaprogramming, or compiler-hint annotations.
+
+Respond with plain prose — no markdown headers, no bullet lists. Structure as:
+1. Root cause analysis (2-3 sentences: what is actually limiting performance here).
+2. Proposed refactoring (detailed, specific to the code shown — include concrete code changes or patterns).
+3. Expected impact and measurement strategy (how to verify the improvement).
+4. Caveats and risks (what could go wrong or where this advice does not apply).
+
+Do not repeat the findings verbatim. Be specific and concrete. Reference line numbers when relevant.`;
+
+export function buildSuggestNovelRefactorRequest(ctx: RefactorContext): CompletionRequest {
+  const findingsStr = ctx.findings.length > 0
+    ? '\nOTHER FINDINGS IN THIS REGION:\n' + ctx.findings
+        .slice(0, 6)
+        .map(f => `  - [${f.ruleId}] ${f.title} at line ${f.line}`)
+        .join('\n')
+    : '';
+
+  const hotnessLine = ctx.hotness !== undefined
+    ? `\nPROFILE HOTNESS: ${ctx.hotness.toFixed(1)}% of total CPU time` : '';
+
+  const user = `FILE: ${ctx.file}:${ctx.line}
+PRIMARY FINDING: [${ctx.ruleId}] ${ctx.title}${hotnessLine}${findingsStr}
+
+CODE:
+\`\`\`cpp
+${ctx.snippet}
+\`\`\`
+
+Propose a novel, concrete refactoring strategy for this code.`;
+
+  return {
+    system: SUGGEST_NOVEL_REFACTOR_SYSTEM,
+    messages: [{ role: 'user', content: user }],
+    temperature: 0.5,
+    maxTokens: 800,
+    responseFormat: 'text',
   };
 }

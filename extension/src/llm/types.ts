@@ -122,3 +122,13 @@ export interface HotnessContext {
 export interface SynthesisContext extends HotnessContext {
   cpuModel?: string;
 }
+
+export interface RefactorContext {
+  ruleId: string;
+  title: string;
+  snippet: string;
+  file: string;
+  line: number;
+  hotness?: number;
+  findings: Array<{ ruleId: string; title: string; line: number }>;
+}

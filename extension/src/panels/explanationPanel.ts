@@ -60,6 +60,10 @@ export class ExplanationPanel implements vscode.Disposable {
     this._post({ type: 'degrade', text: reason });
   }
 
+  startSection(heading: string): void {
+    this._post({ type: 'section', heading });
+  }
+
   dispose(): void {
     if (!this._disposed) this._panel.dispose();
   }
@@ -122,14 +126,28 @@ export class ExplanationPanel implements vscode.Disposable {
     switch (data.type) {
       case 'reset':
         output.textContent = '';
+        output._activeSpan = null;
         status.textContent = 'Loading...';
         status.className = '';
         cursor.style.display = 'inline-block';
         if (data.title) titleEl.textContent = data.title;
         break;
-      case 'token':
-        output.textContent += data.text;
+      case 'token': {
+        const target = output._activeSpan ?? output;
+        target.textContent += data.text;
         break;
+      }
+      case 'section': {
+        const div = document.createElement('div');
+        div.style.cssText = 'font-weight:600;margin-top:18px;margin-bottom:4px;border-top:1px solid var(--vscode-editorWidget-border,#454545);padding-top:10px;';
+        div.textContent = data.heading;
+        output.appendChild(div);
+        const span = document.createElement('span');
+        span.style.whiteSpace = 'pre-wrap';
+        output.appendChild(span);
+        output._activeSpan = span;
+        break;
+      }
       case 'done':
         cursor.style.display = 'none';
         status.textContent = 'Complete.';

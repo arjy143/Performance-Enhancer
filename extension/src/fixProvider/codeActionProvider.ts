@@ -65,6 +65,19 @@ export class PerfLensCodeActionProvider implements vscode.CodeActionProvider, vs
         arguments: [finding],
       };
       actions.push(verifyAction);
+
+      // "Suggest Novel Refactor" action (frontier LLM)
+      const refactorAction = new vscode.CodeAction(
+        `Perf Lens: Suggest novel refactor (AI)`,
+        vscode.CodeActionKind.QuickFix,
+      );
+      refactorAction.diagnostics = [diag];
+      refactorAction.command = {
+        title:   'Suggest novel refactor',
+        command: 'perfLens.suggestRefactor',
+        arguments: [finding],
+      };
+      actions.push(refactorAction);
     }
     void range; void document; // satisfy linter
     return actions;

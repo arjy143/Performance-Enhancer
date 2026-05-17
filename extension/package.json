@@ -66,6 +66,14 @@
         "title": "Perf Lens: Clear LLM Cache"
       },
       {
+        "command": "perfLens.translateFileRemarks",
+        "title": "Perf Lens: Translate All Remarks in File (AI)"
+      },
+      {
+        "command": "perfLens.suggestRefactor",
+        "title": "Perf Lens: Suggest Novel Refactor (AI)"
+      },
+      {
         "command": "perfLens.applyFix",
         "title": "Perf Lens: Apply Fix"
       },
@@ -95,7 +103,11 @@
       },
       {
         "command": "perfLens.compareProfiles",
-        "title": "Perf Lens: Compare Profiles…"
+        "title": "Perf Lens: Compare Profiles..."
+      },
+      {
+        "command": "perfLens.showFlameGraph",
+        "title": "Perf Lens: Show Flame Graph"
       },
       {
         "command": "perfLens.synthesiseHotness",

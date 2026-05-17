@@ -119,6 +119,11 @@ if(PERF_LENS_HAVE_LLVM)
         src/rules/packs/memory_layout/cache_line_straddle.cpp
         src/rules/packs/memory_layout/aos_to_soa.cpp
         src/rules/packs/constexpr/promotion_function.cpp
+        src/rules/packs/hotpath/shared_ptr_in_loop.cpp
+        src/rules/packs/stl_hygiene/container_copy.cpp
+        src/rules/packs/hotpath/map_in_loop.cpp
+        src/rules/packs/stl_hygiene/string_view_param.cpp
+        src/rules/packs/hotpath/unordered_map_no_reserve.cpp
     )
     target_compile_definitions(perf-lens-sidecar-lib PUBLIC PERF_LENS_HAVE_LLVM)
     target_link_libraries(perf-lens-sidecar-lib PUBLIC
