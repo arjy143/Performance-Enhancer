@@ -49,9 +49,12 @@ export class LoopAnalyserPanel implements vscode.Disposable {
     // Compile the snippet in the background and update
     let compiled: CompileResult | undefined;
     try {
-      const cfg   = vscode.workspace.getConfiguration('perfLens');
-      const flags = cfg.get<string[]>('godbolt.extraFlags', ['-O2', '-std=c++20']);
-      compiled = await sidecar.request<CompileResult>('compileSnippet', { source: snippet, flags }, signal);
+      const cfg          = vscode.workspace.getConfiguration('perfLens');
+      const flags        = cfg.get<string[]>('godbolt.extraFlags', ['-O2', '-std=c++20']);
+      const compilerPath = cfg.get<string>('compiler.path', '').trim();
+      const params: Record<string, unknown> = { source: snippet, flags };
+      if (compilerPath) params['compilerPath'] = compilerPath;
+      compiled = await sidecar.request<CompileResult>('compileSnippet', params, signal);
     } catch (err) {
       if (signal.aborted) return;
       logger.debug('loop analyser: compileSnippet failed', err);

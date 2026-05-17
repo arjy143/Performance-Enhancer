@@ -68,16 +68,21 @@ export async function verifyPatch(
   const patchedSource = await applyEditToString(originalSource, patch.edit, uri);
 
   // Get compiler flags from config
-  const cfg   = vscode.workspace.getConfiguration('perfLens');
-  const flags = cfg.get<string[]>('godbolt.extraFlags', ['-O2', '-std=c++20']);
+  const cfg          = vscode.workspace.getConfiguration('perfLens');
+  const flags        = cfg.get<string[]>('godbolt.extraFlags', ['-O2', '-std=c++20']);
+  const compilerPath = cfg.get<string>('compiler.path', '').trim();
+  const compileParams = (source: string) => ({
+    source, flags,
+    ...(compilerPath ? { compilerPath } : {}),
+  });
 
   // Compile both versions
   let before: CompileResult;
   let after:  CompileResult;
   try {
     [before, after] = await Promise.all([
-      sidecar.request<CompileResult>('compileSnippet', { source: originalSource, flags }, signal),
-      sidecar.request<CompileResult>('compileSnippet', { source: patchedSource,  flags }, signal),
+      sidecar.request<CompileResult>('compileSnippet', compileParams(originalSource), signal),
+      sidecar.request<CompileResult>('compileSnippet', compileParams(patchedSource),  signal),
     ]);
   } catch (err) {
     if (signal.aborted) return undefined;

@@ -360,8 +360,9 @@ int main(int argc, char* argv[]) {
     server.register_method("compileSnippet",
         [&godBolt](const perf_lens::json& params) -> perf_lens::json
     {
-        const auto source   = params.value("source",  std::string{});
-        const bool run_mca  = params.value("runMca",  false);
+        const auto source           = params.value("source",       std::string{});
+        const bool run_mca          = params.value("runMca",       false);
+        const auto compiler_override = params.value("compilerPath", std::string{});
         if (source.empty()) throw std::invalid_argument("source is required");
 
         std::vector<std::string> flags;
@@ -371,7 +372,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        const auto result = godBolt.compile(source, flags, run_mca);
+        const auto result = godBolt.compile(source, flags, run_mca, compiler_override);
 
         perf_lens::json diags = perf_lens::json::array();
         for (const auto& d : result.diagnostics) {

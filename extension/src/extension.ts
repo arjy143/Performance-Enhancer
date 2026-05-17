@@ -575,10 +575,20 @@ async function _initialiseAsync(
     }),
   );
 
-  // Seed diagnostics for the currently open file
+  // Seed diagnostics for all already-open C++ files
+  const seenUris = new Set<string>();
+  for (const doc of vscode.workspace.textDocuments) {
+    if ((doc.languageId === 'cpp' || doc.languageId === 'c') && doc.uri.scheme === 'file') {
+      seenUris.add(doc.uri.toString());
+      void diagnostics.refreshFile(doc.uri);
+      void findingsProvider.refreshFile(doc.uri);
+    }
+  }
+  // Also ensure the active editor is covered (may not be a tracked document yet)
   if (vscode.window.activeTextEditor) {
     const doc = vscode.window.activeTextEditor.document;
-    if (doc.languageId === 'cpp' || doc.languageId === 'c') {
+    if ((doc.languageId === 'cpp' || doc.languageId === 'c') &&
+        doc.uri.scheme === 'file' && !seenUris.has(doc.uri.toString())) {
       void diagnostics.refreshFile(doc.uri);
       void findingsProvider.refreshFile(doc.uri);
     }

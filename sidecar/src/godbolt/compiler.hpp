@@ -82,7 +82,8 @@ public:
 
     CompileResult compile(const std::string& source,
                           const std::vector<std::string>& extra_flags,
-                          bool run_mca = false);
+                          bool run_mca = false,
+                          const std::string& compiler_override = {});
 
     static AsmDiff diff(const AssemblyOutput& before, const AssemblyOutput& after);
 

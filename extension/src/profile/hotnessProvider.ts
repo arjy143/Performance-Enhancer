@@ -60,6 +60,12 @@ export class GutterHeatmapProvider implements vscode.Disposable {
       return;
     }
 
+    const cfg = vscode.workspace.getConfiguration('perfLens');
+    if (!cfg.get<boolean>('ui.showGutterHeatmap', true)) {
+      this._clearDecorations(editor);
+      return;
+    }
+
     if (!this._profileManager.hasActiveProfile) {
       this._clearDecorations(editor);
       return;

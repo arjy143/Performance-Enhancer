@@ -162,10 +162,12 @@ std::string GodBoltCompiler::_contentHash(const std::string& source,
 
 CompileResult GodBoltCompiler::compile(const std::string& source,
                                         const std::vector<std::string>& extra_flags,
-                                        bool run_mca)
+                                        bool run_mca,
+                                        const std::string& compiler_override)
 {
     CompileResult result;
-    if (_compiler_path.empty()) {
+    const std::string& active_compiler = compiler_override.empty() ? _compiler_path : compiler_override;
+    if (active_compiler.empty()) {
         result.stderr_output = "No compiler found";
         return result;
     }
@@ -200,7 +202,7 @@ CompileResult GodBoltCompiler::compile(const std::string& source,
 
     // Build command
     std::ostringstream cmd;
-    cmd << _compiler_path;
+    cmd << active_compiler;
     cmd << " -S -fverbose-asm -masm=intel";
     cmd << " -g -fno-asynchronous-unwind-tables";
     cmd << " -fsave-optimization-record=yaml";
