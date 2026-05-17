@@ -28,9 +28,9 @@ function makeRemark(file = '/ws/main.cpp'): OptRemark {
 function mockSidecar(findings: Finding[], remarks: OptRemark[]): import('../sidecar/client').SidecarClient {
   return {
     request: jest.fn(async (method: string) => {
-      if (method === 'getAffectedFiles')  return ['/ws/main.cpp'];
+      if (method === 'getAnalysedFiles')  return ['/ws/main.cpp'];
       if (method === 'getFindings')       return findings;
-      if (method === 'getRemarkedFiles')  return { files: ['/ws/main.cpp'] };
+      if (method === 'getRemarkedFiles')  return ['/ws/main.cpp'];
       if (method === 'getRemarks')        return remarks;
       return [];
     }),

@@ -4,7 +4,7 @@
 namespace perf_lens::rules {
 class EndlFlushRule final : public Rule {
 public:
-    const char* id()    const noexcept override { return "perf-lens.stl.endl-flush"; }
+    const char* id()    const noexcept override { return "perf-lens.stl.endl-in-hot"; }
     const char* title() const noexcept override { return "std::endl forces a flush; prefer '\\n'"; }
     FindingCategory category()   const noexcept override { return FindingCategory::StlHygiene; }
     ConfidenceLevel confidence() const noexcept override { return ConfidenceLevel::High; }

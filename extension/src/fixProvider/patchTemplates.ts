@@ -14,7 +14,7 @@ export function buildPatch(finding: Finding): PatchResult | undefined {
   switch (finding.ruleId) {
     case 'perf-lens.noexcept.move-ops':    return patchNoexceptMoveOps(finding);
     case 'perf-lens.constexpr.promotion-variable': return patchConstexprPromotion(finding);
-    case 'perf-lens.stl.endl-flush':       return patchEndlFlush(finding);
+    case 'perf-lens.stl.endl-in-hot':       return patchEndlFlush(finding);
     case 'perf-lens.stl.range-for-copy':   return patchRangeForCopy(finding);
     case 'perf-lens.hotpath.vector-no-reserve': return patchVectorNoReserve(finding);
     case 'perf-lens.padding.detected':     return patchPaddingDetected(finding);
@@ -37,7 +37,7 @@ export function buildPatch(finding: Finding): PatchResult | undefined {
 export const SUPPORTED_RULE_IDS = new Set([
   'perf-lens.noexcept.move-ops',
   'perf-lens.constexpr.promotion-variable',
-  'perf-lens.stl.endl-flush',
+  'perf-lens.stl.endl-in-hot',
   'perf-lens.stl.range-for-copy',
   'perf-lens.hotpath.vector-no-reserve',
   'perf-lens.padding.detected',

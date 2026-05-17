@@ -9,6 +9,7 @@
 #include "godbolt/compiler.hpp"
 #include "godbolt/diff_engine.hpp"
 #include "profile/store.hpp"
+#include "profile/perf_script_parser.hpp"
 #include "rules/packs/profile_driven/profile_rules.hpp"
 
 #ifdef PERF_LENS_HAVE_LLVM
@@ -187,7 +188,7 @@ int main(int argc, char* argv[]) {
 
     auto& log = perf_lens::Logger::instance();
     log.init(workspace / ".perf-lens" / "logs");
-    log.info("perf-lens-sidecar v0.5.0 starting");
+    log.info("perf-lens-sidecar v1.0.0 starting");
     log.info(std::string("workspace: ") + workspace.string());
 
     // Ensure .perf-lens directory exists
@@ -445,6 +446,48 @@ int main(int argc, char* argv[]) {
         const std::string importer_bin = findImporter(importer_name);
         std::string profile_id;
 
+        // For perf.data files without the Rust importer: try `perf script -i <file>`
+        // which converts binary perf.data to text that our built-in parser can handle.
+        const bool is_perf_data = (importer_name == "perf-importer");
+        if (importer_bin.empty() && is_perf_data) {
+            FILE* perf_check = ::popen("which perf 2>/dev/null", "r");
+            char perf_path[512] = {};
+            if (perf_check) {
+                ::fgets(perf_path, sizeof(perf_path), perf_check);
+                ::pclose(perf_check);
+            }
+            // Trim newline
+            for (char& c : perf_path) if (c == '\n' || c == '\r') { c = '\0'; break; }
+
+            if (perf_path[0] != '\0') {
+                const std::string script_cmd =
+                    std::string(perf_path) + " script -i \"" + file + "\" 2>/dev/null";
+                log.info("importProfile: no perf-importer; running `" + script_cmd + "`");
+                FILE* fp = ::popen(script_cmd.c_str(), "r");
+                if (fp) {
+                    struct PipeStream : std::streambuf {
+                        FILE* fp; char buf[4096];
+                        explicit PipeStream(FILE* f) : fp(f) {}
+                        int underflow() override {
+                            size_t n = ::fread(buf, 1, sizeof(buf), fp);
+                            if (n == 0) return traits_type::eof();
+                            setg(buf, buf, buf + n);
+                            return traits_type::to_int_type(buf[0]);
+                        }
+                    } psb(fp);
+                    std::istream pipe_stream(&psb);
+                    profile_id = profile::ingestPerfScript(pipe_stream, profileStore, label);
+                    ::pclose(fp);
+
+                    const auto profiles = profileStore.listProfiles();
+                    int64_t total = 0;
+                    for (const auto& p : profiles)
+                        if (p.id == profile_id) { total = p.total_samples; break; }
+                    return {{"profileId", profile_id}, {"totalSamples", total}};
+                }
+            }
+        }
+
         if (!importer_bin.empty()) {
             // Spawn importer, read NDJSON from its stdout
             const std::string cmd = importer_bin + " \"" + file + "\" --label \"" + label + "\"";
@@ -467,11 +510,21 @@ int main(int argc, char* argv[]) {
             profile_id = profileStore.ingestFromNdjson(pipe_stream, label);
             ::pclose(fp);
         } else {
-            // No importer binary — try parsing perf script text directly from file
-            log.warn("importProfile: importer '" + importer_name + "' not found in PATH; trying direct ingest");
+            // No importer binary — try the built-in perf-script text parser first,
+            // then fall back to NDJSON (for files already in that format).
+            log.warn("importProfile: importer '" + importer_name + "' not found; "
+                     "trying built-in perf-script parser");
             std::ifstream fs(file);
             if (!fs.is_open()) throw std::runtime_error("cannot open profile file: " + file);
-            profile_id = profileStore.ingestFromNdjson(fs, label);
+
+            if (profile::looksLikePerfScript(fs)) {
+                log.info("importProfile: detected perf script text format — parsing natively");
+                profile_id = profile::ingestPerfScript(fs, profileStore, label);
+            } else {
+                // Last resort: try NDJSON (e.g. the user piped output from a custom tool)
+                log.info("importProfile: falling back to NDJSON ingest");
+                profile_id = profileStore.ingestFromNdjson(fs, label);
+            }
         }
 
         const auto profiles = profileStore.listProfiles();
@@ -579,7 +632,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     server.notify("ready", {
-        {"version",      "0.5.0"},
+        {"version",      "1.0.0"},
         {"pid",          static_cast<int>(::getpid())},
         {"capabilities", capabilities},
     });

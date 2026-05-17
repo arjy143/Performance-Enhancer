@@ -10,7 +10,7 @@ import { loadProjectConfig } from './config/projectConfig';
 import type { PingResult } from './sidecar/protocol';
 import { RemarksDiagnosticProvider } from './diagnostics/provider';
 import { RemarksHoverProvider } from './diagnostics/hover';
-import { FindingsDiagnosticProvider } from './diagnostics/findingsProvider';
+import { FindingsDiagnosticProvider, FindingsHoverProvider } from './diagnostics/findingsProvider';
 import { RemarksTreeDataProvider } from './panels/remarksPanel';
 import { OptRecordsWatcher } from './build/watcher';
 import { LLMManager, readSnippet } from './llm/manager';
@@ -62,6 +62,7 @@ async function _initialiseAsync(
   logger.info(`Project: ${config?.project?.name ?? '(unnamed)'}`);
 
   await detectBuildSystem(workspaceRoot);
+  _warnIfNoCompileCommands(workspaceRoot);
 
   _lifecycle = new SidecarLifecycle(ctx, workspaceRoot);
   ctx.subscriptions.push(_lifecycle);
@@ -102,8 +103,17 @@ async function _initialiseAsync(
   ctx.subscriptions.push(watcher);
 
   // Phase 3: static analysis findings
-  const findingsProvider = new FindingsDiagnosticProvider(sidecar);
+  const findingsProvider = new FindingsDiagnosticProvider(sidecar, workspaceRoot);
   ctx.subscriptions.push(findingsProvider);
+
+  const findingsHover = new FindingsHoverProvider(findingsProvider);
+  ctx.subscriptions.push(
+    vscode.languages.registerHoverProvider(
+      [{ language: 'cpp' }, { language: 'c' }],
+      findingsHover,
+    ),
+    findingsHover,
+  );
 
   // Phase 6: profile integration
   const profileManager = new ProfileManager(sidecar);
@@ -130,7 +140,22 @@ async function _initialiseAsync(
   _initLLMProviders(llm);
 
   // Probe provider health asynchronously — don't block activation.
-  if (llm.hasProviders) void llm.probeAll();
+  if (llm.hasProviders) {
+    void llm.probeAll().then(() => {
+      if (!llm.hasHealthyProvider) {
+        void vscode.window.showWarningMessage(
+          'Perf Lens: No LLM provider is reachable. AI explain and translate features are disabled.',
+          'Configure provider',
+        ).then(choice => {
+          if (choice === 'Configure provider') {
+            void vscode.commands.executeCommand(
+              'workbench.action.openSettings', 'perfLens.llm',
+            );
+          }
+        });
+      }
+    });
+  }
 
   // Commands
   ctx.subscriptions.push(
@@ -154,7 +179,18 @@ async function _initialiseAsync(
       } catch (err) {
         const msg = (err as Error).message;
         logger.error(`Analyse file failed: ${msg}`);
-        void vscode.window.showErrorMessage(`Perf Lens: analysis failed — ${msg}`);
+        if (msg.includes('compile_commands.json')) {
+          const choice = await vscode.window.showErrorMessage(
+            'Perf Lens: compile_commands.json not found. ' +
+            'Configure your build system to generate it (CMake: -DCMAKE_EXPORT_COMPILE_COMMANDS=ON).',
+            'Open Settings',
+          );
+          if (choice === 'Open Settings') {
+            void vscode.commands.executeCommand('workbench.action.openSettings', 'perfLens');
+          }
+        } else {
+          void vscode.window.showErrorMessage(`Perf Lens: analysis failed — ${msg}`);
+        }
         statusBar.setReady();
       }
     }),
@@ -241,8 +277,34 @@ async function _initialiseAsync(
         void vscode.window.showWarningMessage('Perf Lens: No fix template for this rule.');
         return;
       }
-      await vscode.workspace.applyEdit(patch.edit);
-      void vscode.window.showInformationMessage(`Perf Lens: Applied — ${patch.description}`);
+      // For comment-only patches, no verification is meaningful — apply directly.
+      if (patch.isComment || patch.verificationPredicate === 'none') {
+        await vscode.workspace.applyEdit(patch.edit);
+        void vscode.window.showInformationMessage(`Perf Lens: Applied — ${patch.description}`);
+        return;
+      }
+      // Run verification before applying; show asm diff and ask user to confirm.
+      statusBar.setStarting();
+      const ctrl   = new AbortController();
+      const result = await verifyPatch(finding, patch, sidecar, ctrl.signal);
+      statusBar.setReady();
+      if (!result) {
+        void vscode.window.showErrorMessage('Perf Lens: Verification failed — could not compile. Fix not applied.');
+        return;
+      }
+      const panel = AsmDiffPanel.show(ctx);
+      panel.render(patch.description, result.before, result.after, result.diff, result.verified);
+      if (result.verified) {
+        const choice = await vscode.window.showInformationMessage(
+          `Perf Lens: Fix verified — ${result.reason}. Apply it?`,
+          'Apply Fix', 'Dismiss',
+        );
+        if (choice === 'Apply Fix') await vscode.workspace.applyEdit(patch.edit);
+      } else {
+        void vscode.window.showWarningMessage(
+          `Perf Lens: Fix not verified — ${result.reason}. Not applied.`,
+        );
+      }
     }),
 
     vscode.commands.registerCommand('perfLens.verifyFix', async (finding: Finding) => {
@@ -366,7 +428,7 @@ async function _initialiseAsync(
         const findings: Finding[] = [];
         let affectedFiles: string[] = [];
         try {
-          affectedFiles = await sidecar.request<string[]>('getAffectedFiles');
+          affectedFiles = await sidecar.request<string[]>('getAnalysedFiles');
         } catch { /* no findings yet */ }
 
         for (const file of affectedFiles) {
@@ -377,8 +439,8 @@ async function _initialiseAsync(
         // Gather remarks similarly (best-effort)
         const remarks: OptRemark[] = [];
         try {
-          const remarkedFiles = await sidecar.request<{ files: string[] }>('getRemarkedFiles');
-          for (const file of remarkedFiles.files) {
+          const remarkedFiles = await sidecar.request<string[]>('getRemarkedFiles');
+          for (const file of remarkedFiles) {
             const fileRemarks = await sidecar.request<OptRemark[]>('getRemarks', { file });
             remarks.push(...fileRemarks);
           }
@@ -430,6 +492,78 @@ async function _initialiseAsync(
       }
     }),
 
+    vscode.commands.registerCommand('perfLens.configureLLM', () => {
+      void vscode.commands.executeCommand('workbench.action.openSettings', 'perfLens.llm');
+    }),
+
+    vscode.commands.registerCommand('perfLens.profileDiffJson', async () => {
+      const profiles = profileManager.profiles;
+      if (profiles.length < 2) {
+        void vscode.window.showWarningMessage('Perf Lens: at least two profiles are needed for a diff.');
+        return;
+      }
+      const items = profiles.map(p => ({ label: p.label, id: p.id }));
+      const before = await vscode.window.showQuickPick(items, { title: 'Baseline profile (before)' });
+      if (!before) return;
+      const after = await vscode.window.showQuickPick(
+        items.filter(i => i.id !== before.id),
+        { title: 'Candidate profile (after)' },
+      );
+      if (!after) return;
+
+      const saveUri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(
+          path.join(workspaceRoot, `perf-diff-${Date.now()}.json`),
+        ),
+        filters: { 'JSON files': ['json'] },
+        title: 'Save Profile Diff JSON',
+      });
+      if (!saveUri) return;
+
+      const prevActive = profileManager.activeProfileId;
+      profileManager.setActiveProfile(before.id);
+      const beforeFns = await profileManager.getTopFunctions(100);
+      profileManager.setActiveProfile(after.id);
+      const afterFns  = await profileManager.getTopFunctions(100);
+      profileManager.setActiveProfile(prevActive);
+
+      const beforeMap = new Map(beforeFns.map(f => [f.function, f.fraction]));
+      const afterMap  = new Map(afterFns.map(f => [f.function, f.fraction]));
+      const allFns    = new Set([...beforeMap.keys(), ...afterMap.keys()]);
+
+      const REGRESSION_THRESHOLD = 0.02;
+      const rows = [...allFns].map(fn => {
+        const b = beforeMap.get(fn) ?? 0;
+        const a = afterMap.get(fn)  ?? 0;
+        return {
+          function:     fn,
+          beforePct:    +(b * 100).toFixed(2),
+          afterPct:     +(a * 100).toFixed(2),
+          deltaPct:     +((a - b) * 100).toFixed(2),
+          isRegression: (a - b) > REGRESSION_THRESHOLD,
+          isImprovement: (b - a) > REGRESSION_THRESHOLD,
+        };
+      }).sort((x, y) => Math.abs(y.deltaPct) - Math.abs(x.deltaPct));
+
+      const report = {
+        schema:    'perf-lens/profile-diff/v1',
+        baseline:  { id: before.id, label: before.label },
+        candidate: { id: after.id,  label: after.label },
+        summary: {
+          regressions:  rows.filter(r => r.isRegression).length,
+          improvements: rows.filter(r => r.isImprovement).length,
+        },
+        rows,
+      };
+
+      const fs2 = await import('fs');
+      fs2.writeFileSync(saveUri.fsPath, JSON.stringify(report, null, 2), 'utf8');
+      void vscode.window.showInformationMessage(
+        `Perf Lens: diff saved — ${report.summary.regressions} regressions, ` +
+        `${report.summary.improvements} improvements.`,
+      );
+    }),
+
     vscode.commands.registerCommand('perfLens.openLoopAnalyser', async (finding: Finding) => {
       const panel = LoopAnalyserPanel.show(ctx);
       const ctrl  = new AbortController();
@@ -452,6 +586,30 @@ async function _initialiseAsync(
 
   statusBar.setReady();
   logger.info('Perf Lens 1.0.0 ready.');
+}
+
+function _warnIfNoCompileCommands(workspaceRoot: string): void {
+  const { existsSync } = require('fs') as typeof import('fs');
+  const candidates = [
+    path.join(workspaceRoot, 'compile_commands.json'),
+    path.join(workspaceRoot, 'build', 'compile_commands.json'),
+    path.join(workspaceRoot, 'build', 'Release', 'compile_commands.json'),
+    path.join(workspaceRoot, 'build', 'Debug', 'compile_commands.json'),
+  ];
+  if (candidates.some(existsSync)) return;
+
+  void vscode.window.showWarningMessage(
+    'Perf Lens: compile_commands.json not found. Static analysis and compiler remarks require it.',
+    'CMake instructions',
+    'Dismiss',
+  ).then(choice => {
+    if (choice === 'CMake instructions') {
+      void vscode.window.showInformationMessage(
+        'Add -DCMAKE_EXPORT_COMPILE_COMMANDS=ON to your CMake configure step, ' +
+        'then re-run cmake. For other build systems use "bear -- <build-command>".',
+      );
+    }
+  });
 }
 
 function _initLLMProviders(llm: LLMManager): void {

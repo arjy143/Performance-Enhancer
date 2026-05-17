@@ -108,6 +108,14 @@
       {
         "command": "perfLens.diagnosticBundle",
         "title": "Perf Lens: Export Diagnostic Bundle…"
+      },
+      {
+        "command": "perfLens.configureLLM",
+        "title": "Perf Lens: Configure LLM Provider…"
+      },
+      {
+        "command": "perfLens.profileDiffJson",
+        "title": "Perf Lens: Export Profile Diff as JSON…"
       }
     ],
     "menus": {
@@ -209,7 +217,7 @@
     }
   },
   "scripts": {
-    "dev": "pnpm run build && code-insiders --extensionDevelopmentPath=$(pwd)",
+    "dev": "pnpm run build && code --extensionDevelopmentPath=$(pwd)",
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --platform=node --target=node20 --sourcemap",
     "watch": "pnpm run build -- --watch",
     "typecheck": "tsc --noEmit",

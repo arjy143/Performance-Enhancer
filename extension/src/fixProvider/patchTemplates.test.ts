@@ -31,8 +31,8 @@ function editText(edit: import('vscode').WorkspaceEdit, uri: import('vscode').Ur
 }
 
 describe('patchTemplates — SUPPORTED_RULE_IDS', () => {
-  it('includes all 10 supported rules', () => {
-    expect(SUPPORTED_RULE_IDS.size).toBe(10);
+  it('includes all 18 supported rules', () => {
+    expect(SUPPORTED_RULE_IDS.size).toBe(18);
     expect(SUPPORTED_RULE_IDS.has('perf-lens.noexcept.move-ops')).toBe(true);
     expect(SUPPORTED_RULE_IDS.has('perf-lens.padding.detected')).toBe(true);
     expect(SUPPORTED_RULE_IDS.has('perf-lens.hotpath.std-function')).toBe(true);
@@ -96,11 +96,11 @@ describe('patchTemplates — constexpr.promotion-variable', () => {
   });
 });
 
-describe('patchTemplates — stl.endl-flush', () => {
+describe('patchTemplates — stl.endl-in-hot', () => {
   it("replaces std::endl with '\\n'", () => {
     const src = `void f() {\n    std::cout << std::endl;\n}\n`;
     const f = tmpFile(src);
-    const finding = makeFinding({ file: f, line: 2, ruleId: 'perf-lens.stl.endl-flush' });
+    const finding = makeFinding({ file: f, line: 2, ruleId: 'perf-lens.stl.endl-in-hot' });
     const result = buildPatch(finding);
     expect(result).toBeDefined();
     const vscode = require('vscode') as typeof import('vscode');

@@ -85,6 +85,7 @@ add_library(perf-lens-sidecar-lib STATIC
   src/godbolt/compiler.cpp
   # Phase 6: Profile Integration
   src/profile/store.cpp
+  src/profile/perf_script_parser.cpp
   src/rules/packs/profile_driven/profile_rules.cpp
 )
 

@@ -51,6 +51,10 @@ export class LLMManager implements vscode.Disposable {
     if (provider) this._providers.push(provider);
   }
 
+  get hasHealthyProvider(): boolean {
+    return this._providers.some(p => p.health === 'healthy' || p.health === 'degraded');
+  }
+
   async probeAll(): Promise<void> {
     await Promise.all(this._providers.map(p => p.healthCheck()));
   }

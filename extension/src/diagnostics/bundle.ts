@@ -50,7 +50,7 @@ export async function collectBundle(
   const findings: Finding[] = [];
   let affectedFiles: string[] = [];
   try {
-    affectedFiles = await sidecar.request<string[]>('getAffectedFiles');
+    affectedFiles = await sidecar.request<string[]>('getAnalysedFiles');
   } catch { /* empty workspace */ }
   for (const file of affectedFiles) {
     const ff = await sidecar.request<Finding[]>('getFindings', { file });
@@ -60,8 +60,8 @@ export async function collectBundle(
   // --- Remarks ---
   const remarks: OptRemark[] = [];
   try {
-    const remarked = await sidecar.request<{ files: string[] }>('getRemarkedFiles');
-    for (const file of remarked.files) {
+    const remarked = await sidecar.request<string[]>('getRemarkedFiles');
+    for (const file of remarked) {
       const rr = await sidecar.request<OptRemark[]>('getRemarks', { file });
       remarks.push(...rr);
     }
