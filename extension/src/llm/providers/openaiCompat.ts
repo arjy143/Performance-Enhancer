@@ -27,7 +27,7 @@ export class OpenAICompatProvider implements LLMProvider {
     } = {},
   ) {
     this.id = `openai-compat:${_model}@${_baseUrl}`;
-    this.displayName = opts.displayName ?? `OpenAI-compat — ${_model}`;
+    this.displayName = opts.displayName ?? `OpenAI-compat (${_model})`;
     this.capabilities = {
       contextWindowTokens: 128_000,
       outputTokenLimit: 4096,

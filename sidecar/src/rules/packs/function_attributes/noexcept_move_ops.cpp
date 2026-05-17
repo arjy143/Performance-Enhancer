@@ -43,7 +43,7 @@ public:
         f.title      = _title;
         f.message    = "Move " +
                        std::string(isMoveCtor ? "constructor" : "assignment") +
-                       " of '" + cls + "' is not noexcept — std::vector reallocation will copy instead of move";
+                       " of '" + cls + "' is not noexcept; std::vector reallocation will copy instead of move";
         f.file       = loc.getFilename();
         f.line       = static_cast<int>(loc.getLine());
         f.column     = static_cast<int>(loc.getColumn());

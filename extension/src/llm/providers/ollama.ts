@@ -21,7 +21,7 @@ export class OllamaProvider implements LLMProvider {
     modelClass: ProviderCapabilities['modelClass'] = 'small',
   ) {
     this.id = `ollama:${_model}`;
-    this.displayName = `Ollama — ${_model}`;
+    this.displayName = `Ollama (${_model})`;
     this.capabilities = {
       contextWindowTokens: 8192,
       outputTokenLimit: 2048,

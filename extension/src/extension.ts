@@ -38,7 +38,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   ctx.subscriptions.push(channel);
   initLogger(channel, 'info');
 
-  logger.info('Perf Lens activating…');
+  logger.info('Perf Lens activating...');
 
   registerCommands(ctx);
   const statusBar = new PerfLensStatusBar(ctx);
@@ -53,7 +53,7 @@ async function _initialiseAsync(
 ): Promise<void> {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
-    logger.warn('No workspace folder — Perf Lens inactive.');
+    logger.warn('No workspace folder - Perf Lens inactive.');
     statusBar.setError('no workspace');
     return;
   }
@@ -71,7 +71,7 @@ async function _initialiseAsync(
   try {
     client = await _lifecycle.start();
     const pong = await client.request<PingResult>('ping');
-    logger.info(`Sidecar ping OK — pong=${String(pong.pong)}`);
+    logger.info(`Sidecar ping OK - pong=${String(pong.pong)}`);
   } catch (err) {
     const msg = (err as Error).message;
     logger.error(`Sidecar unavailable: ${msg}`);
@@ -157,7 +157,7 @@ async function _initialiseAsync(
     llm.onBudgetWarning(pct => statusBar.setBudgetWarning(pct)),
   );
 
-  // Probe provider health asynchronously — don't block activation.
+  // Probe provider health asynchronously - don't block activation.
   if (llm.hasProviders) {
     void llm.probeAll().then(() => {
       if (!llm.hasHealthyProvider) {
@@ -207,7 +207,7 @@ async function _initialiseAsync(
             void vscode.commands.executeCommand('workbench.action.openSettings', 'perfLens');
           }
         } else {
-          void vscode.window.showErrorMessage(`Perf Lens: analysis failed — ${msg}`);
+          void vscode.window.showErrorMessage(`Perf Lens: analysis failed: ${msg}`);
         }
         statusBar.setReady();
       }
@@ -295,10 +295,10 @@ async function _initialiseAsync(
         void vscode.window.showWarningMessage('Perf Lens: No fix template for this rule.');
         return;
       }
-      // For comment-only patches, no verification is meaningful — apply directly.
+      // For comment-only patches, no verification is meaningful - apply directly.
       if (patch.isComment || patch.verificationPredicate === 'none') {
         await vscode.workspace.applyEdit(patch.edit);
-        void vscode.window.showInformationMessage(`Perf Lens: Applied — ${patch.description}`);
+        void vscode.window.showInformationMessage(`Perf Lens: Applied: ${patch.description}`);
         return;
       }
       // Run verification before applying; show asm diff and ask user to confirm.
@@ -307,20 +307,20 @@ async function _initialiseAsync(
       const result = await verifyPatch(finding, patch, sidecar, ctrl.signal);
       statusBar.setReady();
       if (!result) {
-        void vscode.window.showErrorMessage('Perf Lens: Verification failed — could not compile. Fix not applied.');
+        void vscode.window.showErrorMessage('Perf Lens: Verification failed: could not compile. Fix not applied.');
         return;
       }
       const panel = AsmDiffPanel.show(ctx);
       panel.render(patch.description, result.before, result.after, result.diff, result.verified);
       if (result.verified) {
         const choice = await vscode.window.showInformationMessage(
-          `Perf Lens: Fix verified — ${result.reason}. Apply it?`,
+          `Perf Lens: Fix verified: ${result.reason}. Apply it?`,
           'Apply Fix', 'Dismiss',
         );
         if (choice === 'Apply Fix') await vscode.workspace.applyEdit(patch.edit);
       } else {
         void vscode.window.showWarningMessage(
-          `Perf Lens: Fix not verified — ${result.reason}. Not applied.`,
+          `Perf Lens: Fix not verified: ${result.reason}. Not applied.`,
         );
       }
     }),
@@ -336,21 +336,21 @@ async function _initialiseAsync(
       const result = await verifyPatch(finding, patch, sidecar, ctrl.signal);
       statusBar.setReady();
       if (!result) {
-        void vscode.window.showErrorMessage('Perf Lens: Verification failed — could not compile.');
+        void vscode.window.showErrorMessage('Perf Lens: Verification failed: could not compile.');
         return;
       }
       const panel = AsmDiffPanel.show(ctx);
       panel.render(patch.description, result.before, result.after, result.diff, result.verified);
       if (result.verified) {
         const choice = await vscode.window.showInformationMessage(
-          `Perf Lens: Fix verified — ${result.reason}`,
+          `Perf Lens: Fix verified: ${result.reason}`,
           'Apply Fix', 'Dismiss',
         );
         if (choice === 'Apply Fix') {
           await vscode.workspace.applyEdit(patch.edit);
         }
       } else {
-        void vscode.window.showWarningMessage(`Perf Lens: Fix not verified — ${result.reason}`);
+        void vscode.window.showWarningMessage(`Perf Lens: Fix not verified: ${result.reason}`);
       }
     }),
 
@@ -420,12 +420,12 @@ async function _initialiseAsync(
       if (!uris || uris.length === 0) return;
       try {
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: importing profile…' },
+          { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: importing profile...' },
           () => profileManager.importProfile(uris[0].fsPath),
         );
         void vscode.window.showInformationMessage('Perf Lens: profile imported.');
       } catch (err) {
-        void vscode.window.showErrorMessage(`Perf Lens: import failed — ${(err as Error).message}`);
+        void vscode.window.showErrorMessage(`Perf Lens: import failed: ${(err as Error).message}`);
       }
     }),
 
@@ -477,7 +477,7 @@ async function _initialiseAsync(
         );
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `Perf Lens: SARIF export failed — ${(err as Error).message}`,
+          `Perf Lens: SARIF export failed: ${(err as Error).message}`,
         );
       }
     }),
@@ -493,19 +493,19 @@ async function _initialiseAsync(
 
       try {
         await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: collecting diagnostics…', cancellable: false },
+          { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: collecting diagnostics...', cancellable: false },
           async () => {
             const bundle = await collectBundle(sidecar, profileManager, workspaceRoot);
             writeBundleJson(bundle, saveUri.fsPath);
             const checksum = bundleChecksum(bundle);
             void vscode.window.showInformationMessage(
-              `Perf Lens: bundle saved (${bundle.manifest.summary.findingCount} findings, sha256: ${checksum.slice(0, 8)}…)`,
+              `Perf Lens: bundle saved (${bundle.manifest.summary.findingCount} findings, sha256: ${checksum.slice(0, 8)}...)`,
             );
           },
         );
       } catch (err) {
         void vscode.window.showErrorMessage(
-          `Perf Lens: bundle export failed — ${(err as Error).message}`,
+          `Perf Lens: bundle export failed: ${(err as Error).message}`,
         );
       }
     }),
@@ -578,7 +578,7 @@ async function _initialiseAsync(
       const fs2 = await import('fs');
       fs2.writeFileSync(saveUri.fsPath, JSON.stringify(report, null, 2), 'utf8');
       void vscode.window.showInformationMessage(
-        `Perf Lens: diff saved — ${report.summary.regressions} regressions, ` +
+        `Perf Lens: diff saved: ${report.summary.regressions} regressions, ` +
         `${report.summary.improvements} improvements.`,
       );
     }),

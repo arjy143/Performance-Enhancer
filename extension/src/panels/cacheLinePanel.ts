@@ -70,7 +70,7 @@ export class CacheLinePanel implements vscode.Disposable {
     const wastedBytes = info?.wastedBytes ?? 0;
     const totalSize   = info?.totalSize   ?? 0;
 
-    // Build cache-line grid — configurable for architectures with wider fetch blocks.
+    // Build cache-line grid. Size is configurable for architectures with wider fetch blocks.
     const CACHE_LINE = vscode.workspace.getConfiguration('perfLens')
       .get<number>('architecture.cacheLineBytes', 64);
     const numLines   = Math.ceil(totalSize / CACHE_LINE);
@@ -113,12 +113,12 @@ export class CacheLinePanel implements vscode.Disposable {
 <body>
 <h2>${escHtml(structName)}</h2>
 <div class="meta">Total size: ${totalSize} bytes · ${numLines} cache line${numLines !== 1 ? 's' : ''}</div>
-<div class="warning">⚠ ${wastedBytes} bytes wasted to padding</div>
+<div class="warning">${wastedBytes} bytes wasted to padding</div>
 ${lineGrids.join('')}
 <div class="action">
   <h3>Suggested action</h3>
   <p>Reorder fields from largest to smallest alignment to eliminate padding:</p>
-  <code>// Prefer: double → int → short → char → char</code>
+  <code>// Prefer: double, int, short, char, char (largest to smallest alignment)</code>
   <p>Use the <code>perfLens.explainFinding</code> command with an LLM provider for a
      field-specific reorder suggestion.</p>
 </div>

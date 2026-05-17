@@ -87,7 +87,7 @@ ShadowCompileResult ShadowCompiler::compile(const std::filesystem::path& source_
     if (exit_code != 0) {
         Logger::instance().warn(
             "Shadow compile exited " + std::to_string(exit_code) +
-            " — opt-records may still be present");
+            "; opt-records may still be present");
     }
 
     if (!std::filesystem::exists(out_yaml)) {

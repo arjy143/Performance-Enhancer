@@ -122,7 +122,7 @@ export class ExplanationPanel implements vscode.Disposable {
     switch (data.type) {
       case 'reset':
         output.textContent = '';
-        status.textContent = 'Loading…';
+        status.textContent = 'Loading...';
         status.className = '';
         cursor.style.display = 'inline-block';
         if (data.title) titleEl.textContent = data.title;

@@ -92,7 +92,7 @@ export class GutterHeatmapProvider implements vscode.Disposable {
       bucketRanges.get(bucket.label)!.push({
         range,
         hoverMessage: new vscode.MarkdownString(
-          `**Perf Lens Hotness** — ${pct}% of CPU cycles (${bucket.label})`,
+          `**Perf Lens Hotness** - ${pct}% of CPU cycles (${bucket.label})`,
         ),
       });
     }

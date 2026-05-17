@@ -152,7 +152,7 @@ AsmDiff diffInstructions(const std::vector<std::string>& before,
 
     std::ostringstream summ;
     if (result.vectorisation_improved) {
-        summ << "Vector width: " << vector_width_before << "x → " << vector_width_after << "x";
+        summ << "Vector width: " << vector_width_before << "x to " << vector_width_after << "x";
         if (net != 0) summ << "; instructions: " << (net > 0 ? "+" : "") << net;
     } else {
         summ << "Instructions: " << (net >= 0 ? "+" : "") << net;

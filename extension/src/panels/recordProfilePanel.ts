@@ -42,7 +42,7 @@ export class RecordProfilePanel implements vscode.Disposable {
     }
     const panel = vscode.window.createWebviewPanel(
       'perfLens.recordProfile',
-      'Perf Lens — Record Profile',
+      'Perf Lens : Record Profile',
       vscode.ViewColumn.Active,
       { enableScripts: true },
     );
@@ -102,14 +102,14 @@ export class RecordProfilePanel implements vscode.Disposable {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `Perf Lens: recording — ${opts.label}`,
+        title: `Perf Lens: recording : ${opts.label}`,
         cancellable: false,
       },
       async () => {
         try {
           await this._runCommand(cmd);
           void vscode.window.showInformationMessage(
-            `Perf Lens: recording complete. Importing profile…`,
+            `Perf Lens: recording complete. Importing profile...`,
           );
           await this._profileManager.importProfile(outFile, opts.label);
           void vscode.window.showInformationMessage(
@@ -117,7 +117,7 @@ export class RecordProfilePanel implements vscode.Disposable {
           );
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Perf Lens: recording failed — ${(err as Error).message}`,
+            `Perf Lens: recording failed : ${(err as Error).message}`,
           );
           logger.error('RecordProfilePanel: recording error:', (err as Error).message);
         } finally {
@@ -186,9 +186,8 @@ export class RecordProfilePanel implements vscode.Disposable {
   <div class="hint">Higher = more detail, higher overhead. 999 Hz is recommended.</div>
 </label>
 <div class="warn">
-  ⚠ Requires <code>perf</code> to be installed and your kernel to allow perf_event_open
-  (<code>sudo sysctl kernel.perf_event_paranoid=1</code>).
-  Linux only.
+  Note: requires <code>perf</code> to be installed and your kernel to allow perf_event_open
+  (<code>sudo sysctl kernel.perf_event_paranoid=1</code>). Linux only.
 </div>
 <div class="actions">
   <button class="primary" onclick="startRecording()">Start Recording</button>

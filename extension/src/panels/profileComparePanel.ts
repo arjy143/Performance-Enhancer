@@ -10,7 +10,7 @@ interface CompareRow {
   isRegression: boolean;   // delta > REGRESSION_THRESHOLD
 }
 
-const REGRESSION_THRESHOLD = 0.02;  // absolute fraction — 2 percentage points
+const REGRESSION_THRESHOLD = 0.02;  // absolute fraction, 2 percentage points
 
 export class ProfileComparePanel implements vscode.Disposable {
   private static _instance: ProfileComparePanel | undefined;
@@ -25,7 +25,7 @@ export class ProfileComparePanel implements vscode.Disposable {
     }
     const panel = vscode.window.createWebviewPanel(
       'perfLens.compareProfiles',
-      'Perf Lens — Compare Profiles',
+      'Perf Lens: Compare Profiles',
       vscode.ViewColumn.Beside,
       { enableScripts: true },
     );
@@ -158,7 +158,7 @@ function compare(){
         <td class="num">${(r.beforePct * 100).toFixed(1)}%</td>
         <td class="num">${(r.afterPct * 100).toFixed(1)}%</td>
         <td class="num">${deltaStr}</td>
-        <td>${r.isRegression ? '⚠ regression' : r.deltaPct < -REGRESSION_THRESHOLD ? '✓ improved' : ''}</td>
+        <td>${r.isRegression ? 'regression' : r.deltaPct < -REGRESSION_THRESHOLD ? 'improved' : ''}</td>
       </tr>`;
     }).join('');
 
@@ -179,7 +179,7 @@ function compare(){
 <body>
 <h1>Profile Comparison</h1>
 <div class="subtitle">
-  Baseline: <strong>${escHtml(beforeMeta?.label ?? 'unknown')}</strong> →
+  Baseline: <strong>${escHtml(beforeMeta?.label ?? 'unknown')}</strong> vs
   Candidate: <strong>${escHtml(afterMeta?.label ?? 'unknown')}</strong>
 </div>
 <table>

@@ -28,7 +28,7 @@ export class AnthropicProvider implements LLMProvider {
     } = {},
   ) {
     this.id = `anthropic:${_model}`;
-    this.displayName = `Anthropic — ${_model}`;
+    this.displayName = `Anthropic (${_model})`;
     this.capabilities = {
       contextWindowTokens: 200_000,
       outputTokenLimit: 8192,

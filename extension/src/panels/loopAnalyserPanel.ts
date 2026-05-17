@@ -41,7 +41,7 @@ export class LoopAnalyserPanel implements vscode.Disposable {
     signal: AbortSignal,
   ): Promise<void> {
     const snippet = readSnippet(finding.file, finding.line, 8);
-    this._panel.title = `Loop: ${finding.title} — ${finding.file.split('/').pop()}:${finding.line}`;
+    this._panel.title = `Loop: ${finding.title} (${finding.file.split('/').pop()}:${finding.line})`;
 
     // Show loading state immediately
     this._panel.webview.html = this._loadingHtml(finding, snippet, remarks);
@@ -87,7 +87,7 @@ export class LoopAnalyserPanel implements vscode.Disposable {
     ).join('') || '<tr><td colspan="3">No remarks at this location</td></tr>';
 
     const asmSection = loading
-      ? '<p class="muted">Compiling…</p>'
+      ? '<p class="muted">Compiling...</p>'
       : compiled?.success
         ? `<pre class="asm-box">${escHtml(compiled.assembly.text || '(empty)')}</pre>`
         : compiled

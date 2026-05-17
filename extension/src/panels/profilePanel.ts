@@ -15,7 +15,7 @@ export class ProfilePanel implements vscode.Disposable {
     }
     const panel = vscode.window.createWebviewPanel(
       'perfLens.profilePanel',
-      'Perf Lens — Profiles',
+      'Perf Lens : Profiles',
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true },
     );
@@ -65,12 +65,12 @@ export class ProfilePanel implements vscode.Disposable {
     const file = uris[0].fsPath;
     try {
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: importing profile…' },
+        { location: vscode.ProgressLocation.Notification, title: 'Perf Lens: importing profile...' },
         () => this._profileManager.importProfile(file),
       );
       void vscode.window.showInformationMessage('Perf Lens: profile imported successfully.');
     } catch (err) {
-      void vscode.window.showErrorMessage(`Perf Lens: profile import failed — ${(err as Error).message}`);
+      void vscode.window.showErrorMessage(`Perf Lens: profile import failed: ${(err as Error).message}`);
     }
     await this._refresh();
   }
@@ -126,7 +126,7 @@ export class ProfilePanel implements vscode.Disposable {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Perf Lens — Profiles</title>
+<title>Perf Lens : Profiles</title>
 <style>
   body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 12px; }
   h1 { font-size: 1.2em; margin-bottom: 8px; }
@@ -146,10 +146,10 @@ export class ProfilePanel implements vscode.Disposable {
 <body>
 <h1>Profiles</h1>
 <div class="toolbar">
-  <button onclick="importProfile()">Import Profile…</button>
+  <button onclick="importProfile()">Import Profile...</button>
 </div>
 ${profiles.length === 0
-  ? '<p class="empty">No profiles loaded. Use <em>Import Profile…</em> to load a perf or pprof file.</p>'
+  ? '<p class="empty">No profiles loaded. Use <em>Import Profile...</em> to load a perf or pprof file.</p>'
   : `<table>
       <thead><tr><th>Label</th><th>Profiler</th><th>Samples</th><th>Recorded</th><th>Actions</th></tr></thead>
       <tbody>${profileRows}</tbody>

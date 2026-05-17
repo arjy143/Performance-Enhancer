@@ -50,7 +50,7 @@ public:
         Finding f;
         f.rule_id    = _rule_id;
         f.title      = _title;
-        f.message    = "push_back inside a loop without a preceding reserve() — "
+        f.message    = "push_back inside a loop without a preceding reserve(); "
                        "the vector will reallocate (and copy/move all elements) "
                        "O(log N) times; call reserve(N) before the loop";
         f.file       = loc.getFilename();

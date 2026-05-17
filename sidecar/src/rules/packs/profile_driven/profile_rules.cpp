@@ -63,7 +63,7 @@ void checkCacheMissHotspot(const std::string& profile_id,
             "Cache-miss hotspot",
             "Line is " + pctStr(h.fraction) + " of cycles with " +
             pctStr(it->second) + " of L1 cache misses. "
-            "Consider struct layout reorganisation, prefetching, or AoS→SoA conversion.",
+            "Consider struct layout reorganisation, prefetching, or AoS-to-SoA conversion.",
             file, h.line,
             FindingCategory::MemoryLayout,
             ConfidenceLevel::High));
@@ -125,7 +125,7 @@ void checkMemoryBandwidthBound(const std::string& profile_id,
             "perf-lens.profile.memory-bandwidth-bound",
             "Memory-bandwidth bound",
             "Line is " + pctStr(h.fraction) + " of cycles with " +
-            pctStr(it->second) + " of LLC misses — main-memory bandwidth pressure. "
+            pctStr(it->second) + " of LLC misses; main-memory bandwidth pressure. "
             "Reduce working-set size, improve locality, or compress data.",
             file, h.line,
             FindingCategory::MemoryLayout,

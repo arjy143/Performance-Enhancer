@@ -5,7 +5,7 @@ namespace perf_lens::rules {
 class MutexWhereAtomicRule final : public Rule {
 public:
     const char* id()    const noexcept override { return "perf-lens.concurrency.mutex-where-atomic"; }
-    const char* title() const noexcept override { return "std::mutex protecting a single integer — use std::atomic"; }
+    const char* title() const noexcept override { return "std::mutex protecting a single integer; use std::atomic"; }
     FindingCategory category()   const noexcept override { return FindingCategory::HotPath; }
     ConfidenceLevel confidence() const noexcept override { return ConfidenceLevel::Low; }
     void registerMatchers(MatchFinder& finder, const std::string& build_id) override;

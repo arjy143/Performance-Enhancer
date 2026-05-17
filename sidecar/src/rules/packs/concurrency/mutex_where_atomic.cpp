@@ -74,7 +74,7 @@ public:
         const auto loc = sm.getPresumedLoc(rec->getBeginLoc());
         Finding f;
         f.rule_id    = "perf-lens.concurrency.mutex-where-atomic";
-        f.title      = "std::mutex protecting a single integer — use std::atomic";
+        f.title      = "std::mutex protecting a single integer; use std::atomic";
         f.message    = "'" + rec->getNameAsString() + "' contains a std::mutex that appears to "
                        "guard only " + std::to_string(dataCount) + " integral/pointer field(s). "
                        "Replace the mutex + guarded field pair with std::atomic<T> "

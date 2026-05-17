@@ -32,7 +32,7 @@ public:
         Finding f;
         f.rule_id    = _rule_id;
         f.title      = _title;
-        f.message    = "std::endl flushes the stream buffer on every call — "
+        f.message    = "std::endl flushes the stream buffer on every call; "
                        "use '\\n' for output without flushing; "
                        "flush explicitly only when required";
         f.file       = loc.getFilename();

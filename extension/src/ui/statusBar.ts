@@ -14,7 +14,7 @@ export class PerfLensStatusBar implements vscode.Disposable {
 
   setStarting(): void {
     this._item.text    = '$(loading~spin) Perf Lens';
-    this._item.tooltip = 'Perf Lens: starting…';
+    this._item.tooltip = 'Perf Lens: starting...';
     this._item.backgroundColor = undefined;
   }
 
@@ -34,14 +34,14 @@ export class PerfLensStatusBar implements vscode.Disposable {
 
   setNoSidecar(): void {
     this._item.text    = '$(warning) Perf Lens: sidecar missing';
-    this._item.tooltip = 'Perf Lens: sidecar binary not found — see "Perf Lens" output channel';
+    this._item.tooltip = 'Perf Lens: sidecar binary not found - see "Perf Lens" output channel';
     this._item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
   }
 
   setProfileLoaded(label?: string): void {
     const suffix = label ? `: ${label}` : '';
     this._item.text    = `$(graph) Perf Lens: profile loaded${suffix}`;
-    this._item.tooltip = 'Perf Lens: profile active — click to open Performance Panel';
+    this._item.tooltip = 'Perf Lens: profile active - click to open Performance Panel';
     this._item.backgroundColor = undefined;
   }
 

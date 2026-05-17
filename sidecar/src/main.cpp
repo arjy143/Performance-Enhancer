@@ -519,7 +519,7 @@ int main(int argc, char* argv[]) {
             if (!fs.is_open()) throw std::runtime_error("cannot open profile file: " + file);
 
             if (profile::looksLikePerfScript(fs)) {
-                log.info("importProfile: detected perf script text format — parsing natively");
+                log.info("importProfile: detected perf script text format, parsing natively");
                 profile_id = profile::ingestPerfScript(fs, profileStore, label);
             } else {
                 // Last resort: try NDJSON (e.g. the user piped output from a custom tool)

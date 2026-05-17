@@ -54,7 +54,6 @@ export class AsmDiffPanel implements vscode.Disposable {
     verified: boolean,
   ): string {
     const statusColour = verified ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-errorForeground)';
-    const statusIcon   = verified ? '✓' : '✗';
     const statusText   = verified ? 'Verified' : 'Not verified';
 
     const beforeLines = (before.assembly.text || '(empty)').split('\n');
@@ -106,11 +105,11 @@ export class AsmDiffPanel implements vscode.Disposable {
 </head>
 <body>
 <h2>${escHtml(title)}</h2>
-<div class="status">${statusIcon} ${statusText}</div>
+<div class="status">${statusText}</div>
 <div class="summary">${escHtml(diff.summary)}</div>
 <div class="stats">
-  <div class="stat"><div class="val">${before.assembly.vectorWidthUsed}x → ${after.assembly.vectorWidthUsed}x</div><div class="lbl">Vector width</div></div>
-  <div class="stat"><div class="val">${diff.instructionsBefore} → ${diff.instructionsAfter}</div><div class="lbl">Instructions</div></div>
+  <div class="stat"><div class="val">${before.assembly.vectorWidthUsed}x to ${after.assembly.vectorWidthUsed}x</div><div class="lbl">Vector width</div></div>
+  <div class="stat"><div class="val">${diff.instructionsBefore} to ${diff.instructionsAfter}</div><div class="lbl">Instructions</div></div>
   <div class="stat"><div class="val">${before.wallTimeMs}ms / ${after.wallTimeMs}ms</div><div class="lbl">Compile time</div></div>
 </div>
 <div class="cols">

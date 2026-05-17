@@ -122,7 +122,7 @@ function checkPredicate(
   switch (predicate) {
     case 'vectorisation_enabled':
       if (diff.vectorisationImproved)
-        return { verified: true, reason: `Vector width: ${diff.vectorWidthBefore}x → ${diff.vectorWidthAfter}x` };
+        return { verified: true, reason: `Vector width: ${diff.vectorWidthBefore}x to ${diff.vectorWidthAfter}x` };
       return { verified: false, reason: 'Vectorisation width did not improve' };
 
     case 'no_endl_call':
@@ -134,7 +134,7 @@ function checkPredicate(
       // If call count decreased (function body collapsed), treat as verified
       if (diff.instructionsAfter < diff.instructionsBefore)
         return { verified: true, reason: `Instructions reduced by ${diff.instructionsBefore - diff.instructionsAfter}` };
-      return { verified: false, reason: 'Instruction count did not decrease — constexpr evaluation not confirmed' };
+      return { verified: false, reason: 'Instruction count did not decrease; constexpr evaluation not confirmed' };
 
     case 'none':
       // No verification predicate — always "verified" (apply-only)

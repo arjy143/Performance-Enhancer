@@ -238,7 +238,7 @@ function patchVirtualDispatch(finding: Finding): PatchResult | undefined {
   if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
 
   const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
-  const comment = `${indent}// TODO(perf-lens): Virtual dispatch inside loop — consider CRTP, final class, or type-sorted batching.`;
+  const comment = `${indent}// TODO(perf-lens): Virtual dispatch inside loop. Consider CRTP, final class, or type-sorted batching.`;
 
   const edit = new vscode.WorkspaceEdit();
   edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
@@ -356,7 +356,7 @@ function patchComplexCf(finding: Finding): PatchResult | undefined {
   if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
 
   const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
-  const comment = `${indent}// TODO(perf-lens): Early exit prevents vectorisation — consider restructuring with a predicated expression.`;
+  const comment = `${indent}// TODO(perf-lens): Early exit prevents vectorisation. Consider restructuring with a predicated expression.`;
 
   const edit = new vscode.WorkspaceEdit();
   edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
@@ -374,7 +374,7 @@ function patchReductionFp(finding: Finding): PatchResult | undefined {
   if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
 
   const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
-  const comment = `${indent}// TODO(perf-lens): FP reduction — add -ffast-math (or -fassociative-math) to enable SIMD vectorisation.`;
+  const comment = `${indent}// TODO(perf-lens): FP reduction: add -ffast-math (or -fassociative-math) to enable SIMD vectorisation.`;
 
   const edit = new vscode.WorkspaceEdit();
   edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
@@ -392,7 +392,7 @@ function patchCacheLineStraddle(finding: Finding): PatchResult | undefined {
   if (lineIdx < 0 || lineIdx >= lines.length) return undefined;
 
   const indent = lines[lineIdx].match(/^(\s*)/)?.[1] ?? '';
-  const comment = `${indent}// TODO(perf-lens): Field straddles a 64-byte cache line — add alignas(64) or reorder fields.`;
+  const comment = `${indent}// TODO(perf-lens): Field straddles a 64-byte cache line; add alignas(64) or reorder fields.`;
 
   const edit = new vscode.WorkspaceEdit();
   edit.insert(vscode.Uri.file(finding.file), new vscode.Position(lineIdx, 0), comment + '\n');
