@@ -103,14 +103,47 @@ suppressions:
 
 ---
 
-### Applying fixes
+### Applying fixes and local compilation (godbolt-lite)
 
-For findings where an automated fix is safe, a lightbulb appears in the gutter. Click it (or press `Ctrl+.` on the finding line) to see available actions:
+Perf Lens compiles C++ snippets locally using whatever compiler it finds — first from `compile_commands.json`, then `clang++` / `g++` / `c++` in PATH. No code is sent anywhere. This powers three related features:
 
-- **Perf Lens: \<description\>** — applies the fix directly after verifying the patch produces better assembly
-- **Perf Lens: Verify fix (preview asm diff)** — compiles before and after, shows the assembly diff in a side panel without touching your file
+#### Fix verification and the Asm Diff panel
 
-Fixes that require human judgement (e.g. `std::function` → template refactor) instead insert a `// TODO(perf-lens)` comment explaining the change needed.
+For findings where an automated fix is safe, a lightbulb appears in the gutter. Press `Ctrl+.` (or click the lightbulb) to see the available code actions:
+
+- **Perf Lens: `<description>`** — compiles the file before and after the patch, checks that the assembly actually improved, then applies the edit. Shows the **Asm Diff** panel with the result.
+- **Perf Lens: Verify fix (preview asm diff)** — same compilation and diff, but does **not** apply the edit. Use this to inspect the assembly change first.
+
+The **Asm Diff** panel shows:
+- A **before / after column** layout with the full assembly of each version
+- A **unified diff** below, with added lines in green and removed lines in red
+- Summary stats: vector width change (`1x → 8x`), instruction count change, compile time
+
+If verification fails (the patch didn't improve codegen), the panel shows why and the edit is not applied.
+
+Fixes that require human judgement — such as replacing `std::function` with a template, or restructuring AoS to SoA — instead insert a `// TODO(perf-lens): ...` comment explaining the change. These are clearly labelled as guidance comments, not direct edits.
+
+#### Loop Analyser
+
+The Loop Analyser opens a tabbed panel alongside the editor with four views of the code around a finding:
+
+| Tab | Contents |
+|---|---|
+| **Source** | The 8 lines of source around the finding, plus the finding's description |
+| **Assembly** | Intel-syntax asm produced by compiling that snippet at `-O2 -std=c++20` (configurable), plus the detected vector width |
+| **MCA** | `llvm-mca` throughput analysis: IPC, cycles per iteration, bottleneck resource — auto-detected if `llvm-mca` or `llvm-mca-19` is in PATH |
+| **Remarks** | Compiler optimisation remarks that apply to this location (populated after running *Regenerate Remarks*) |
+
+**Trigger it** from the hover card of any finding — click **Open Loop Analyser**.
+
+It is most useful for vectorisation and hot-path findings: you can see immediately whether the loop vectorised, what the SIMD width is, and what the compiler said prevented optimisation.
+
+**Change the compilation flags** via `Ctrl+,` → `perfLens.godbolt.extraFlags`. Defaults to `["-O2", "-std=c++20"]`. To test with fast-math:
+```json
+"perfLens.godbolt.extraFlags": ["-O2", "-std=c++20", "-march=native", "-ffast-math"]
+```
+
+> **Note on `perfLens.godbolt.enabled`:** This setting controls only the optional remote [godbolt.org](https://godbolt.org) API (sending snippets to Compiler Explorer's servers). It has no effect on local compilation, which always works. Leave it `false` unless you specifically want the remote integration.
 
 ---
 
@@ -192,16 +225,6 @@ Importing a profile re-sorts all findings by measured hotness and adds `[X.X% cy
 
 ---
 
-### Loop Analyser
-
-Opens a side-by-side view of a loop's source, generated assembly, and any compiler remarks that apply to it.
-
-Trigger it from the hover card of any finding: click **Open Loop Analyser**.
-
-Useful for understanding why a loop wasn't vectorised and verifying that a fix actually changed the assembly.
-
----
-
 ### Exporting results
 
 **SARIF export** (for CI or code review tools):  
@@ -224,7 +247,7 @@ Useful for understanding why a loop wasn't vectorised and verifying that a fix a
 | `perfLens.llm.primary` | `""` | Primary LLM in the form `provider:model` (e.g. `ollama:qwen2.5-coder:7b`) |
 | `perfLens.llm.allowRemote` | `false` | Allow sending code to remote (non-local) LLM providers |
 | `perfLens.llm.budgetUSD` | unset | Monthly spend cap for remote providers |
-| `perfLens.compiler.path` | `""` | Path to C++ compiler for fix verification (empty = auto-detect) |
-| `perfLens.godbolt.enabled` | `false` | Enable opt-in godbolt.org integration for the Loop Analyser |
+| `perfLens.godbolt.extraFlags` | `["-O2", "-std=c++20"]` | Compiler flags used for snippet compilation (fix verification, Loop Analyser) |
+| `perfLens.godbolt.enabled` | `false` | Enable the optional remote godbolt.org API (local compilation always works without this) |
 
 All settings are under `Ctrl+,` → search **Perf Lens**.
