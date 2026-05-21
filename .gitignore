@@ -12,6 +12,9 @@ pnpm-lock.yaml
 sidecar/build/
 sidecar/cmake-build-*/
 
+# Compiled sidecar binary (too large for git; build locally)
+extension/resources/bin/
+
 # Rust (profile-tools, Phase 6+)
 target/
 
