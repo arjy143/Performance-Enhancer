@@ -27,6 +27,8 @@ import { ProfilePanel } from './panels/profilePanel';
 import { FlameGraphPanel } from './panels/flameGraphPanel';
 import { RecordProfilePanel } from './panels/recordProfilePanel';
 import { ProfileComparePanel } from './panels/profileComparePanel';
+import { VecWidthProvider } from './diagnostics/vecWidthProvider';
+import { CompileTracePanel } from './panels/compileTracePanel';
 import { buildSarifLog } from './sarif/exporter';
 import { collectBundle, writeBundleJson, bundleChecksum, defaultBundleFilename } from './diagnostics/bundle';
 import type { ProviderConfig } from './llm/types';
@@ -126,6 +128,13 @@ async function _initialiseAsync(
 
   const hotnessProvider = new GutterHeatmapProvider(profileManager);
   ctx.subscriptions.push(hotnessProvider);
+
+  // Vectorisation width heatmap — shows [4x]/[8x]/[miss] on loop lines after remarks are ingested.
+  const vecWidthProvider = new VecWidthProvider(sidecar);
+  ctx.subscriptions.push(vecWidthProvider);
+  ctx.subscriptions.push(
+    watcher.onRemarksIngested(filePath => void vecWidthProvider.onFileIngested(filePath)),
+  );
 
   // Update status bar when the active profile changes.
   ctx.subscriptions.push(
@@ -240,6 +249,25 @@ async function _initialiseAsync(
         void vscode.window.showErrorMessage(`Perf Lens: ${msg}`);
         statusBar.setReady();
       }
+    }),
+
+    vscode.commands.registerCommand('perfLens.profileCompileTime', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || (editor.document.languageId !== 'cpp' && editor.document.languageId !== 'c')) {
+        void vscode.window.showWarningMessage('Perf Lens: open a C or C++ file to profile its compile time.');
+        return;
+      }
+      const filePath = editor.document.uri.fsPath;
+      // Panel opens immediately in loading state; compile runs in background.
+      CompileTracePanel.show(ctx, sidecar, filePath);
+      // Also refresh vec decorations after compile finishes (remarks are re-ingested).
+      void vecWidthProvider.onFileIngested(filePath);
+    }),
+
+    vscode.commands.registerCommand('perfLens.toggleVecHeatmap', () => {
+      const cfg = vscode.workspace.getConfiguration('perfLens');
+      const current = cfg.get<boolean>('ui.showVecWidthHeatmap', true);
+      void cfg.update('ui.showVecWidthHeatmap', !current, vscode.ConfigurationTarget.Workspace);
     }),
 
     vscode.commands.registerCommand('perfLens.translateRemark', async (remark: OptRemark) => {

@@ -7,6 +7,7 @@ namespace perf_lens {
 
 struct ShadowCompileResult {
     std::filesystem::path remarks_file;
+    std::filesystem::path trace_file;    // empty if compile() called without trace
     std::string           compiler_stderr;
 };
 
@@ -26,7 +27,8 @@ class ShadowCompiler {
 public:
     explicit ShadowCompiler(const std::filesystem::path& workspace_root);
 
-    ShadowCompileResult compile(const std::filesystem::path& source_file);
+    ShadowCompileResult compile(const std::filesystem::path& source_file,
+                                bool with_time_trace = false);
 
 private:
     std::string findCompileCommand(const std::filesystem::path& source_file);

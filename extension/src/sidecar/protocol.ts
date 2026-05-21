@@ -269,6 +269,28 @@ export interface GetFileHotnessParams  { profileId: string; file: string; event?
 export interface GetTopFunctionsParams { profileId: string; n?: number; event?: string }
 export interface DeleteProfileParams   { profileId: string }
 
+// Compile-time profiling (-ftime-trace)
+export interface TraceEvent {
+  name:     string;   // template/function/include name
+  category: string;   // Clang trace event name ("InstantiateClass", "CodeGen Function", etc.)
+  durUs:    number;   // duration in microseconds
+}
+
+export interface CompileTraceResult {
+  totalUs:       number;
+  frontendUs:    number;
+  backendUs:     number;
+  parseUs:       number;
+  instantiateUs: number;
+  codegenUs:     number;
+  optUs:         number;
+  instantiations: TraceEvent[];
+  codegenFns:     TraceEvent[];
+  includes:       TraceEvent[];
+  remarksCount:   number;
+  remarksFile:    string;
+}
+
 export function isRpcResponse(msg: unknown): msg is RpcResponse {
   if (typeof msg !== 'object' || msg === null) return false;
   const m = msg as Record<string, unknown>;

@@ -17,6 +17,7 @@
 #include "rules/engine.hpp"
 #endif
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -259,6 +260,106 @@ perf_lens::json findingToJson(const perf_lens::rules::Finding& f) {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Compile-time trace parsing (-ftime-trace JSON)
+// ---------------------------------------------------------------------------
+
+struct TraceEntry {
+    std::string name;
+    std::string detail;
+    long long   dur_us{0};   // duration in microseconds
+};
+
+// Parse a Clang -ftime-trace JSON and extract the top slow events per category.
+perf_lens::json parseCompileTrace(const std::filesystem::path& trace_file) {
+    std::ifstream f(trace_file);
+    if (!f.is_open())
+        throw std::runtime_error("Cannot open trace file: " + trace_file.string());
+
+    nlohmann::json doc;
+    try { f >> doc; }
+    catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error(std::string("Trace JSON parse error: ") + e.what());
+    }
+
+    const auto& events = doc.value("traceEvents", nlohmann::json::array());
+
+    // Buckets we care about:
+    long long total_us    = 0;
+    long long frontend_us = 0;
+    long long backend_us  = 0;
+    long long parse_us    = 0;
+    long long instantiate_us = 0;
+    long long codegen_us  = 0;
+    long long opt_us      = 0;
+
+    std::vector<TraceEntry> instantiations;
+    std::vector<TraceEntry> codegen_fns;
+    std::vector<TraceEntry> includes;
+
+    for (const auto& ev : events) {
+        // Only complete events (ph == "X") contribute duration.
+        if (ev.value("ph", std::string{}) != "X") continue;
+
+        const auto name   = ev.value("name", std::string{});
+        const auto dur    = ev.value("dur",  0LL);
+        const auto detail = ev.contains("args") ? ev["args"].value("detail", std::string{}) : std::string{};
+
+        if (name == "Total ExecuteCompiler") { total_us    = dur; continue; }
+        if (name == "Frontend")              { frontend_us = dur; continue; }
+        if (name == "Backend")               { backend_us  = dur; continue; }
+        if (name == "OptModule")             { opt_us     += dur; continue; }
+
+        if (name == "ParseDeclaration" || name == "ParseFunctionDefinition" ||
+            name == "ParseTemplate"    || name == "ParseNamespace") {
+            parse_us += dur;
+        }
+
+        if (name.find("Instantiate") != std::string::npos && !detail.empty()) {
+            instantiate_us += dur;
+            instantiations.push_back({name, detail, dur});
+        }
+
+        if (name == "CodeGen Function" && !detail.empty()) {
+            codegen_us += dur;
+            codegen_fns.push_back({name, detail, dur});
+        }
+
+        if (name == "Source" && !detail.empty()) {
+            includes.push_back({name, detail, dur});
+        }
+    }
+
+    // Sort each list by duration descending; keep top 15.
+    auto byDur = [](const TraceEntry& a, const TraceEntry& b){ return a.dur_us > b.dur_us; };
+    std::sort(instantiations.begin(), instantiations.end(), byDur);
+    std::sort(codegen_fns.begin(),    codegen_fns.end(),    byDur);
+    std::sort(includes.begin(),       includes.end(),        byDur);
+    if (instantiations.size() > 15) instantiations.resize(15);
+    if (codegen_fns.size()    > 15) codegen_fns.resize(15);
+    if (includes.size()       > 15) includes.resize(15);
+
+    auto toArr = [](const std::vector<TraceEntry>& v) {
+        perf_lens::json arr = perf_lens::json::array();
+        for (const auto& e : v)
+            arr.push_back({{"name", e.detail}, {"category", e.name}, {"durUs", e.dur_us}});
+        return arr;
+    };
+
+    return {
+        {"totalUs",       total_us},
+        {"frontendUs",    frontend_us},
+        {"backendUs",     backend_us},
+        {"parseUs",       parse_us},
+        {"instantiateUs", instantiate_us},
+        {"codegenUs",     codegen_us},
+        {"optUs",         opt_us},
+        {"instantiations", toArr(instantiations)},
+        {"codegenFns",     toArr(codegen_fns)},
+        {"includes",       toArr(includes)},
+    };
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -419,6 +520,29 @@ int main(int argc, char* argv[]) {
             {"remarksFile", result.remarks_file.string()},
             {"count",       count},
         };
+    });
+
+    server.register_method("profileCompileTime",
+        [&shadow, &remarkStore](const perf_lens::json& params) -> perf_lens::json
+    {
+        const auto file = params.value("file", std::string{});
+        if (file.empty()) throw std::invalid_argument("file is required");
+
+        // Shadow-compile with -ftime-trace; also ingest remarks as a side-effect.
+        const auto result  = shadow.compile(file, /*with_time_trace=*/true);
+        const auto remarks = perf_lens::remarks::parseClangYaml(result.remarks_file, "shadow");
+        remarkStore.insertBulk(remarks);
+
+        if (result.trace_file.empty())
+            throw std::runtime_error(
+                "Compiler did not produce a -ftime-trace file. "
+                "Ensure the compiler in compile_commands.json is Clang 9+ (GCC does not "
+                "support -ftime-trace).");
+
+        auto trace = parseCompileTrace(result.trace_file);
+        trace["remarksCount"] = static_cast<int>(remarks.size());
+        trace["remarksFile"]  = result.remarks_file.string();
+        return trace;
     });
 
     server.register_method("getRemarkedFiles",

@@ -8,6 +8,10 @@ export class OptRecordsWatcher implements vscode.Disposable {
   private readonly _watcher: vscode.FileSystemWatcher;
   private readonly _subs: vscode.Disposable[] = [];
 
+  // Fires with the source file path after remarks for it are ingested.
+  private readonly _onRemarksIngested = new vscode.EventEmitter<string>();
+  readonly onRemarksIngested = this._onRemarksIngested.event;
+
   constructor(
     private readonly _client: SidecarClient,
     private readonly _diagnostics: RemarksDiagnosticProvider,
@@ -44,11 +48,13 @@ export class OptRecordsWatcher implements vscode.Disposable {
     const active = vscode.window.activeTextEditor;
     if (active && (active.document.languageId === 'cpp' || active.document.languageId === 'c')) {
       void this._diagnostics.refreshFile(active.document.uri);
+      this._onRemarksIngested.fire(active.document.uri.fsPath);
     }
   }
 
   dispose(): void {
     this._watcher.dispose();
     this._subs.forEach(s => s.dispose());
+    this._onRemarksIngested.dispose();
   }
 }

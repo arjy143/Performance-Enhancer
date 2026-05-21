@@ -58,6 +58,14 @@
         "title": "Perf Lens: Translate Remark with AI"
       },
       {
+        "command": "perfLens.profileCompileTime",
+        "title": "Perf Lens: Profile Compile Time for This File"
+      },
+      {
+        "command": "perfLens.toggleVecHeatmap",
+        "title": "Perf Lens: Toggle Vectorisation Width Heatmap"
+      },
+      {
         "command": "perfLens.explainFinding",
         "title": "Perf Lens: Explain Finding with AI"
       },
@@ -214,6 +222,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show hotness heatmap in the editor gutter when a profile is loaded."
+        },
+        "perfLens.ui.showVecWidthHeatmap": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show vectorisation width badges ([4x], [8x], [miss]) on loop lines after compiler remarks are generated."
         },
         "perfLens.ui.maxFindingsPerFile": {
           "type": "number",
